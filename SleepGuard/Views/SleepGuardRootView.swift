@@ -21,10 +21,6 @@ struct SleepGuardRootView: View {
                 SleepLogView(viewModel: viewModel)
                     .tabItem { Label(L("睡眠日志", "Sleep Log"), systemImage: "bed.double") }
                     .tag(2)
-
-                SettingsView(viewModel: viewModel)
-                    .tabItem { Label(L("设置", "Settings"), systemImage: "gearshape") }
-                    .tag(3)
             }
             .padding(.top, 4)
         }
@@ -36,8 +32,11 @@ struct SleepGuardRootView: View {
     }
 }
 
+// MARK: - Header
+
 private struct HeaderView: View {
     @ObservedObject var viewModel: SleepGuardViewModel
+    @State private var showSettings = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -57,12 +56,16 @@ private struct HeaderView: View {
                     .font(.headline.weight(.semibold))
                     .animation(.easeInOut(duration: 0.2), value: viewModel.diagnosis?.overallStatus)
                 if let lastRefresh = viewModel.lastRefresh {
-                    Text(L("上次刷新：", "Last refresh: ") + lastRefresh.formatted(date: .omitted, time: .standard))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    TimelineView(.periodic(from: Date(), by: 30)) { _ in
+                        Text(relativeTimeString(from: lastRefresh))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
+
             Spacer()
+
             Button {
                 Task { await viewModel.refreshAll() }
             } label: {
@@ -81,6 +84,18 @@ private struct HeaderView: View {
             .help(L("复制诊断报告", "Copy Diagnostic Report"))
 
             Button {
+                showSettings = true
+            } label: {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.borderless)
+            .help(L("设置", "Settings"))
+            .popover(isPresented: $showSettings, arrowEdge: .bottom) {
+                SettingsView(viewModel: viewModel)
+                    .frame(width: 340)
+            }
+
+            Button {
                 NSApplication.shared.terminate(nil)
             } label: {
                 Image(systemName: "power")
@@ -93,7 +108,18 @@ private struct HeaderView: View {
         .animation(.easeInOut(duration: 0.2), value: viewModel.isRefreshing)
         Divider()
     }
+
+    private func relativeTimeString(from date: Date) -> String {
+        let seconds = Int(-date.timeIntervalSinceNow)
+        if seconds < 10 { return L("刚刚刷新", "Just refreshed") }
+        if seconds < 60 { return L("\(seconds) 秒前", "\(seconds)s ago") }
+        let minutes = seconds / 60
+        if minutes == 1 { return L("1 分钟前", "1m ago") }
+        return L("\(minutes) 分钟前", "\(minutes)m ago")
+    }
 }
+
+// MARK: - Current Status
 
 private struct CurrentStatusView: View {
     @ObservedObject var viewModel: SleepGuardViewModel
@@ -101,60 +127,66 @@ private struct CurrentStatusView: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                Color.clear.frame(height: 0).id("top")
-                if let error = viewModel.lastError {
-                    InfoCard(title: L("错误", "Error"), systemImage: "exclamationmark.triangle") {
-                        Text(error).foregroundStyle(.red)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    Color.clear.frame(height: 0).id("top")
+                    if let error = viewModel.lastError {
+                        InfoCard(title: L("错误", "Error"), systemImage: "exclamationmark.triangle") {
+                            Text(error).foregroundStyle(.red)
+                        }
+                        .transition(.opacity)
                     }
-                    .transition(.opacity)
-                }
 
-                if let diagnosis = viewModel.diagnosis {
-                    VStack(alignment: .leading, spacing: 10) {
-                        SummaryCard(diagnosis: diagnosis)
-                        AssertionFlagsView(status: diagnosis.parsed.systemStatus)
-                        ProcessAssertionsView(items: diagnosis.processItems) { item in
-                            viewModel.ignoreProcess(item)
+                    if let diagnosis = viewModel.diagnosis {
+                        VStack(alignment: .leading, spacing: 10) {
+                            SummaryCard(diagnosis: diagnosis)
+                            AssertionFlagsView(status: diagnosis.parsed.systemStatus)
+                            ProcessAssertionsView(items: diagnosis.processItems) { item in
+                                viewModel.ignoreProcess(item)
+                            }
+                            KernelAssertionsView(items: diagnosis.kernelItems) { item in
+                                viewModel.ignoreKernel(item)
+                            }
+                            IgnoredAssertionsView(
+                                processItems: diagnosis.ignoredProcessItems,
+                                kernelItems: diagnosis.ignoredKernelItems
+                            ) { signature in
+                                viewModel.removeIgnoredRule(signature: signature)
+                            }
+                            RecommendationsView(recommendations: diagnosis.recommendations)
                         }
-                        KernelAssertionsView(items: diagnosis.kernelItems) { item in
-                            viewModel.ignoreKernel(item)
-                        }
-                        IgnoredAssertionsView(
-                            processItems: diagnosis.ignoredProcessItems,
-                            kernelItems: diagnosis.ignoredKernelItems
-                        ) { signature in
-                            viewModel.removeIgnoredRule(signature: signature)
-                        }
-                        RecommendationsView(recommendations: diagnosis.recommendations)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    } else if viewModel.isRefreshing {
+                        ProgressView(L("正在读取 pmset 输出...", "Reading pmset output..."))
+                            .frame(maxWidth: .infinity, minHeight: 220)
+                    } else {
+                        EmptyText(L("暂无检测结果，请点击\"刷新\"重试。", "No results. Click Refresh to retry."))
+                            .frame(maxWidth: .infinity, minHeight: 220)
                     }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                } else if viewModel.isRefreshing {
-                    ProgressView(L("正在读取 pmset 输出...", "Reading pmset output..."))
-                        .frame(maxWidth: .infinity, minHeight: 220)
-                } else {
-                    EmptyText(L("暂无检测结果，请点击\"刷新\"重试。", "No results. Click Refresh to retry."))
-                        .frame(maxWidth: .infinity, minHeight: 220)
                 }
+                .padding(12)
+                .animation(.easeInOut(duration: 0.24), value: viewModel.diagnosis != nil)
+                .animation(.easeInOut(duration: 0.18), value: viewModel.lastError)
             }
-            .padding(12)
-            .animation(.easeInOut(duration: 0.24), value: viewModel.diagnosis != nil)
-            .animation(.easeInOut(duration: 0.18), value: viewModel.lastError)
+            .onChange(of: scrollToTopToken) { _ in
+                proxy.scrollTo("top", anchor: .top)
+            }
         }
-        .onChange(of: scrollToTopToken) { _ in
-            proxy.scrollTo("top", anchor: .top)
-        }
-        } // ScrollViewReader
     }
 }
+
+// MARK: - Summary Card
 
 private struct SummaryCard: View {
     let diagnosis: SleepDiagnosis
 
+    private var allClear: Bool {
+        diagnosis.criticalCount == 0 && diagnosis.warningCount == 0 && diagnosis.kernelAssertionCount == 0
+    }
+
     var body: some View {
         InfoCard(title: L("当前状态", "Current Status"), systemImage: "moon.zzz") {
-            HStack {
+            HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(diagnosis.overallStatus.title)
                         .font(.title3.weight(.semibold))
@@ -164,27 +196,82 @@ private struct SummaryCard: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                VStack(alignment: .trailing, spacing: 5) {
-                    CountBadge(title: L("严重", "Critical"), value: diagnosis.criticalCount, color: .red)
-                    CountBadge(title: L("注意", "Warning"), value: diagnosis.warningCount, color: .yellow)
-                    CountBadge(title: "USB", value: diagnosis.kernelAssertionCount, color: .orange)
+                if allClear {
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.green)
+                        Text(L("无阻断项", "No blockers"))
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.green)
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                } else {
+                    VStack(alignment: .trailing, spacing: 5) {
+                        CountBadge(title: L("严重", "Critical"), value: diagnosis.criticalCount, color: .red)
+                        CountBadge(title: L("注意", "Warning"), value: diagnosis.warningCount, color: .yellow)
+                        CountBadge(title: "USB", value: diagnosis.kernelAssertionCount, color: .orange)
+                    }
+                    .transition(.opacity)
                 }
             }
+            .animation(.easeInOut(duration: 0.2), value: allClear)
         }
     }
 }
 
+// MARK: - Assertion Flags
+
 private struct AssertionFlagsView: View {
     let status: AssertionStatus
+    @State private var isExpanded = false
+
+    private var anyActive: Bool {
+        status.preventUserIdleSystemSleep || status.preventSystemSleep ||
+        status.preventUserIdleDisplaySleep || status.internalPreventSleep ||
+        status.hasKernelAssertions
+    }
 
     var body: some View {
         InfoCard(title: L("系统断言状态", "System Assertion State"), systemImage: "list.bullet.rectangle") {
-            VStack(alignment: .leading, spacing: 7) {
-                FlagRow(title: SleepAssertionType.preventUserIdleSystemSleep.displayName, active: status.preventUserIdleSystemSleep)
-                FlagRow(title: SleepAssertionType.preventSystemSleep.displayName, active: status.preventSystemSleep)
-                FlagRow(title: SleepAssertionType.preventUserIdleDisplaySleep.displayName, active: status.preventUserIdleDisplaySleep)
-                FlagRow(title: SleepAssertionType.internalPreventSleep.displayName, active: status.internalPreventSleep)
-                FlagRow(title: L("内核断言", "Kernel Assertions"), active: status.hasKernelAssertions)
+            if anyActive || isExpanded {
+                VStack(alignment: .leading, spacing: 7) {
+                    FlagRow(title: SleepAssertionType.preventUserIdleSystemSleep.displayName, active: status.preventUserIdleSystemSleep)
+                    FlagRow(title: SleepAssertionType.preventSystemSleep.displayName, active: status.preventSystemSleep)
+                    FlagRow(title: SleepAssertionType.preventUserIdleDisplaySleep.displayName, active: status.preventUserIdleDisplaySleep)
+                    FlagRow(title: SleepAssertionType.internalPreventSleep.displayName, active: status.internalPreventSleep)
+                    FlagRow(title: L("内核断言", "Kernel Assertions"), active: status.hasKernelAssertions)
+                    if !anyActive {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.18)) { isExpanded = false }
+                        } label: {
+                            Label(L("收起", "Collapse"), systemImage: "chevron.up")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .padding(.top, 2)
+                    }
+                }
+            } else {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .font(.subheadline)
+                    Text(L("所有断言状态正常", "All assertion states are normal"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) { isExpanded = true }
+                    } label: {
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(L("展开详情", "Show details"))
+                }
             }
         }
     }
@@ -196,16 +283,19 @@ private struct FlagRow: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            Image(systemName: active ? "circle.fill" : "circle")
-                .foregroundStyle(active ? .orange : .secondary)
-                .font(.caption2)
+            Image(systemName: active ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+                .foregroundStyle(active ? .orange : .green)
+                .font(.caption)
             Text(title)
                 .font(.caption)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
+                .foregroundStyle(active ? .primary : .secondary)
         }
     }
 }
+
+// MARK: - Process Assertions
 
 private struct ProcessAssertionsView: View {
     let items: [AnalyzedProcessAssertion]
@@ -230,49 +320,70 @@ private struct ProcessAssertionsView: View {
 private struct ProcessRow: View {
     let item: AnalyzedProcessAssertion
     let onIgnore: (AnalyzedProcessAssertion) -> Void
+    @State private var isExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(item.assertion.processName)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                Text(L("进程 ID \(item.assertion.pid)", "PID \(item.assertion.pid)"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                RiskBadge(level: item.analysis.risk)
-                Button {
-                    onIgnore(item)
-                } label: {
-                    Image(systemName: "eye.slash")
+        HStack(alignment: .top, spacing: 8) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(item.analysis.risk.color)
+                .frame(width: 3)
+                .frame(minHeight: 32)
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(item.assertion.processName)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    Text(L("PID \(item.assertion.pid)", "PID \(item.assertion.pid)"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    RiskBadge(level: item.analysis.risk)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
+                    } label: {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.borderless)
+                    Button {
+                        onIgnore(item)
+                    } label: {
+                        Image(systemName: "eye.slash")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(L("忽略该进程阻止项", "Ignore this process assertion"))
                 }
-                .buttonStyle(.borderless)
-                .help(L("忽略该进程阻止项", "Ignore this process assertion"))
-            }
-            Text("\(SleepAssertionType(rawPMSetValue: item.assertion.assertionType).displayName) · \(item.assertion.duration)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-            if let trend = item.trend {
-                Label(trend.summary, systemImage: "chart.line.uptrend.xyaxis")
+
+                Text("\(SleepAssertionType(rawPMSetValue: item.assertion.assertionType).displayName) · \(item.assertion.duration)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                if isExpanded {
+                    if let trend = item.trend {
+                        Label(trend.summary, systemImage: "chart.line.uptrend.xyaxis")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Text(item.assertion.reason)
+                        .font(.caption)
+                        .lineLimit(2)
+                        .foregroundStyle(.primary)
+                    Text(item.analysis.explanation)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
             }
-            Text(item.assertion.reason)
-                .font(.caption)
-                .lineLimit(2)
-                .foregroundStyle(.primary)
-            Text(item.analysis.explanation)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
+
+// MARK: - Kernel Assertions
 
 private struct KernelAssertionsView: View {
     let items: [AnalyzedKernelAssertion]
@@ -285,35 +396,7 @@ private struct KernelAssertionsView: View {
             } else {
                 VStack(spacing: 8) {
                     ForEach(items) { item in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(item.assertion.owner)
-                                    .font(.subheadline.weight(.semibold))
-                                    .lineLimit(1)
-                                Spacer()
-                                RiskBadge(level: item.analysis.risk)
-                                Button {
-                                    onIgnore(item)
-                                } label: {
-                                    Image(systemName: "eye.slash")
-                                }
-                                .buttonStyle(.borderless)
-                                .help(L("忽略该 USB / 内核断言", "Ignore this USB/kernel assertion"))
-                            }
-                            Text(item.assertion.assertionCode)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            if let trend = item.trend {
-                                Label(trend.summary, systemImage: "chart.line.uptrend.xyaxis")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Text(item.analysis.explanation)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
+                        KernelRow(item: item, onIgnore: onIgnore)
                         if item.id != items.last?.id { Divider() }
                     }
                 }
@@ -321,6 +404,65 @@ private struct KernelAssertionsView: View {
         }
     }
 }
+
+private struct KernelRow: View {
+    let item: AnalyzedKernelAssertion
+    let onIgnore: (AnalyzedKernelAssertion) -> Void
+    @State private var isExpanded = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(item.analysis.risk.color)
+                .frame(width: 3)
+                .frame(minHeight: 32)
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(item.assertion.owner)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    Spacer()
+                    RiskBadge(level: item.analysis.risk)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
+                    } label: {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.borderless)
+                    Button {
+                        onIgnore(item)
+                    } label: {
+                        Image(systemName: "eye.slash")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(L("忽略该 USB / 内核断言", "Ignore this USB/kernel assertion"))
+                }
+
+                Text(item.assertion.assertionCode)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if isExpanded {
+                    if let trend = item.trend {
+                        Label(trend.summary, systemImage: "chart.line.uptrend.xyaxis")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Text(item.analysis.explanation)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Ignored Assertions
 
 private struct IgnoredAssertionsView: View {
     let processItems: [AnalyzedProcessAssertion]
@@ -397,6 +539,8 @@ private struct IgnoredItemRow: View {
     }
 }
 
+// MARK: - Recommendations
+
 private struct RecommendationsView: View {
     let recommendations: [String]
 
@@ -405,9 +549,10 @@ private struct RecommendationsView: View {
             VStack(alignment: .leading, spacing: 7) {
                 ForEach(recommendations, id: \.self) { item in
                     HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "chevron.right")
-                            .font(.caption2)
-                            .padding(.top, 3)
+                        Circle()
+                            .fill(Color.secondary.opacity(0.5))
+                            .frame(width: 4, height: 4)
+                            .padding(.top, 5)
                         Text(item)
                             .font(.caption)
                             .fixedSize(horizontal: false, vertical: true)
@@ -418,44 +563,55 @@ private struct RecommendationsView: View {
     }
 }
 
+// MARK: - History
+
 private struct HistoryView: View {
     let records: [HistoryRecord]
 
     var body: some View {
         List(records) { record in
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(record.status.title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(record.status.color)
-                    Spacer()
-                    Text(record.timestamp.formatted(date: .abbreviated, time: .standard))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Text(L(
-                    "严重 \(record.criticalCount) · 注意 \(record.warningCount) · USB \(record.kernelAssertionCount)",
-                    "Critical \(record.criticalCount) · Warning \(record.warningCount) · USB \(record.kernelAssertionCount)"
-                ))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                if let assertionSnapshots = record.assertionSnapshots, assertionSnapshots.isEmpty == false {
+            HStack(spacing: 0) {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(record.status.color)
+                    .frame(width: 3)
+                    .padding(.trailing, 10)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(record.status.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(record.status.color)
+                        Spacer()
+                        Text(record.timestamp.formatted(date: .abbreviated, time: .standard))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     Text(L(
-                        "记录 \(assertionSnapshots.count) 个阻止项快照",
-                        "\(assertionSnapshots.count) assertion snapshot(s) recorded"
+                        "严重 \(record.criticalCount) · 注意 \(record.warningCount) · USB \(record.kernelAssertionCount)",
+                        "Critical \(record.criticalCount) · Warning \(record.warningCount) · USB \(record.kernelAssertionCount)"
                     ))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    if let assertionSnapshots = record.assertionSnapshots, assertionSnapshots.isEmpty == false {
+                        Text(L(
+                            "记录 \(assertionSnapshots.count) 个阻止项快照",
+                            "\(assertionSnapshots.count) assertion snapshot(s) recorded"
+                        ))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                    Text(record.status.summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                Text(record.status.summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
             .padding(.vertical, 3)
         }
         .listStyle(.inset)
     }
 }
+
+// MARK: - Sleep Log
 
 private struct SleepLogView: View {
     @ObservedObject var viewModel: SleepGuardViewModel
@@ -614,110 +770,7 @@ private struct SummaryMetricRow: View {
     }
 }
 
-private struct PulsingStatusDot: View {
-    let color: Color
-    let isAnimating: Bool
-    @State private var pulse = false
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(color.opacity(isAnimating ? 0.35 : 0), lineWidth: 2)
-                .frame(width: 20, height: 20)
-                .scaleEffect(pulse && isAnimating ? 1.16 : 0.72)
-                .opacity(pulse && isAnimating ? 0.15 : 0.45)
-            Circle()
-                .fill(color)
-                .frame(width: 10, height: 10)
-        }
-        .onAppear {
-            updatePulse()
-        }
-        .onChange(of: isAnimating) { _ in
-            updatePulse()
-        }
-        .animation(.easeInOut(duration: 0.2), value: color)
-    }
-
-    private func updatePulse() {
-        if isAnimating {
-            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
-                pulse = true
-            }
-        } else {
-            withAnimation(.easeOut(duration: 0.18)) {
-                pulse = false
-            }
-        }
-    }
-}
-
-private struct RotatingRefreshIcon: View {
-    let isAnimating: Bool
-    @State private var turns = false
-
-    var body: some View {
-        Image(systemName: "arrow.clockwise")
-            .rotationEffect(.degrees(turns && isAnimating ? 360 : 0))
-            .frame(width: 18, height: 18)
-            .onAppear {
-                updateRotation()
-            }
-            .onChange(of: isAnimating) { _ in
-                updateRotation()
-            }
-    }
-
-    private func updateRotation() {
-        if isAnimating {
-            turns = false
-            withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
-                turns = true
-            }
-        } else {
-            withAnimation(.easeOut(duration: 0.16)) {
-                turns = false
-            }
-        }
-    }
-}
-
-private struct BreathingLabel: View {
-    let title: String
-    let systemImage: String
-    let isAnimating: Bool
-    @State private var breath = false
-
-    init(_ title: String, systemImage: String, isAnimating: Bool) {
-        self.title = title
-        self.systemImage = systemImage
-        self.isAnimating = isAnimating
-    }
-
-    var body: some View {
-        Label(title, systemImage: systemImage)
-            .foregroundStyle(.secondary)
-            .opacity(breath && isAnimating ? 0.55 : 1)
-            .onAppear {
-                updateBreath()
-            }
-            .onChange(of: isAnimating) { _ in
-                updateBreath()
-            }
-    }
-
-    private func updateBreath() {
-        if isAnimating {
-            withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
-                breath = true
-            }
-        } else {
-            withAnimation(.easeOut(duration: 0.16)) {
-                breath = false
-            }
-        }
-    }
-}
+// MARK: - Settings
 
 private struct SettingsView: View {
     @ObservedObject var viewModel: SleepGuardViewModel
@@ -802,6 +855,8 @@ private struct SettingsView: View {
     }
 }
 
+// MARK: - Reusable Components
+
 private struct InfoCard<Content: View>: View {
     let title: String
     let systemImage: String
@@ -872,5 +927,88 @@ private struct EmptyText: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Animation Helpers
+
+private struct PulsingStatusDot: View {
+    let color: Color
+    let isAnimating: Bool
+    @State private var pulse = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(color.opacity(isAnimating ? 0.35 : 0), lineWidth: 2)
+                .frame(width: 20, height: 20)
+                .scaleEffect(pulse && isAnimating ? 1.16 : 0.72)
+                .opacity(pulse && isAnimating ? 0.15 : 0.45)
+            Circle()
+                .fill(color)
+                .frame(width: 10, height: 10)
+        }
+        .onAppear { updatePulse() }
+        .onChange(of: isAnimating) { _ in updatePulse() }
+        .animation(.easeInOut(duration: 0.2), value: color)
+    }
+
+    private func updatePulse() {
+        if isAnimating {
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
+        } else {
+            withAnimation(.easeOut(duration: 0.18)) { pulse = false }
+        }
+    }
+}
+
+private struct RotatingRefreshIcon: View {
+    let isAnimating: Bool
+    @State private var turns = false
+
+    var body: some View {
+        Image(systemName: "arrow.clockwise")
+            .rotationEffect(.degrees(turns && isAnimating ? 360 : 0))
+            .frame(width: 18, height: 18)
+            .onAppear { updateRotation() }
+            .onChange(of: isAnimating) { _ in updateRotation() }
+    }
+
+    private func updateRotation() {
+        if isAnimating {
+            turns = false
+            withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) { turns = true }
+        } else {
+            withAnimation(.easeOut(duration: 0.16)) { turns = false }
+        }
+    }
+}
+
+private struct BreathingLabel: View {
+    let title: String
+    let systemImage: String
+    let isAnimating: Bool
+    @State private var breath = false
+
+    init(_ title: String, systemImage: String, isAnimating: Bool) {
+        self.title = title
+        self.systemImage = systemImage
+        self.isAnimating = isAnimating
+    }
+
+    var body: some View {
+        Label(title, systemImage: systemImage)
+            .foregroundStyle(.secondary)
+            .opacity(breath && isAnimating ? 0.55 : 1)
+            .onAppear { updateBreath() }
+            .onChange(of: isAnimating) { _ in updateBreath() }
+    }
+
+    private func updateBreath() {
+        if isAnimating {
+            withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) { breath = true }
+        } else {
+            withAnimation(.easeOut(duration: 0.16)) { breath = false }
+        }
     }
 }
