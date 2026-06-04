@@ -2,6 +2,16 @@ import XCTest
 @testable import SleepGuard
 
 final class SleepGuardTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        SleepGuardLocalization.preferredLanguageOverride = "zh-Hans"
+    }
+
+    override func tearDown() {
+        SleepGuardLocalization.preferredLanguageOverride = nil
+        super.tearDown()
+    }
+
     func testAssertionsParserParsesSystemProcessesTimeoutAndKernelAssertions() {
         let sample = """
         2026-06-03 18:37:44 +0800

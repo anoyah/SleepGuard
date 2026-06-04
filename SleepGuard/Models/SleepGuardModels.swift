@@ -20,25 +20,25 @@ enum SleepAssertionType: String, Codable, CaseIterable, Hashable {
     var displayName: String {
         switch self {
         case .preventUserIdleSystemSleep:
-            return "防止系统空闲睡眠"
+            return L("防止系统空闲睡眠", "Prevent User Idle System Sleep")
         case .preventSystemSleep:
-            return "防止系统睡眠"
+            return L("防止系统睡眠", "Prevent System Sleep")
         case .preventUserIdleDisplaySleep:
-            return "防止显示器空闲睡眠"
+            return L("防止显示器空闲睡眠", "Prevent User Idle Display Sleep")
         case .internalPreventSleep:
-            return "内部防睡眠"
+            return L("内部防睡眠", "Internal Prevent Sleep")
         case .userIsActive:
-            return "用户处于活动状态"
+            return L("用户处于活动状态", "User Is Active")
         case .backgroundTask:
-            return "后台任务"
+            return L("后台任务", "Background Task")
         case .applePushServiceTask:
-            return "Apple 推送服务任务"
+            return L("Apple 推送服务任务", "Apple Push Service Task")
         case .externalMedia:
-            return "外部媒体"
+            return L("外部媒体", "External Media")
         case .networkClientActive:
-            return "网络客户端活动"
+            return L("网络客户端活动", "Network Client Active")
         case .other:
-            return "其他断言"
+            return L("其他断言", "Other Assertion")
         }
     }
 }
@@ -51,10 +51,10 @@ enum RiskLevel: String, Codable, CaseIterable {
 
     var title: String {
         switch self {
-        case .normal: return "正常"
-        case .warning: return "注意"
-        case .critical: return "严重"
-        case .usbWarning: return "USB 注意"
+        case .normal: return L("正常", "Normal")
+        case .warning: return L("注意", "Warning")
+        case .critical: return L("严重", "Critical")
+        case .usbWarning: return L("USB 注意", "USB Warning")
         }
     }
 
@@ -75,20 +75,23 @@ enum OverallSleepStatus: String, Codable {
 
     var title: String {
         switch self {
-        case .normal: return "正常"
-        case .warning: return "有轻微阻止"
-        case .critical: return "有明确阻止休眠"
+        case .normal: return L("正常", "Normal")
+        case .warning: return L("有轻微阻止", "Minor Blocker")
+        case .critical: return L("有明确阻止休眠", "Sleep Blocked")
         }
     }
 
     var summary: String {
         switch self {
         case .normal:
-            return "当前没有发现明确阻止自动休眠的项目。"
+            return L("当前没有发现明确阻止自动休眠的项目。",
+                     "No items found that are blocking automatic sleep.")
         case .warning:
-            return "发现短暂或常见的阻止项，建议观察是否会长期持续。"
+            return L("发现短暂或常见的阻止项，建议观察是否会长期持续。",
+                     "Transient or common blockers found. Monitor if they persist.")
         case .critical:
-            return "发现明确或长时间阻止休眠的项目，建议优先处理。"
+            return L("发现明确或长时间阻止休眠的项目，建议优先处理。",
+                     "Persistent or explicit sleep blockers found. Address them promptly.")
         }
     }
 
@@ -219,25 +222,28 @@ struct AssertionTrend: Equatable {
 
     var summary: String {
         if consecutiveCount <= 1 {
-            return "本次首次发现"
+            return L("本次首次发现", "First seen this session")
         }
-        return "已连续出现 \(consecutiveCount) 次，约 \(Self.formatDuration(observedDurationSeconds))"
+        return L(
+            "已连续出现 \(consecutiveCount) 次，约 \(Self.formatDuration(observedDurationSeconds))",
+            "Seen \(consecutiveCount) times, ~\(Self.formatDuration(observedDurationSeconds))"
+        )
     }
 
     private static func formatDuration(_ seconds: Int) -> String {
         if seconds < 60 {
-            return "\(max(seconds, 0)) 秒"
+            return L("\(max(seconds, 0)) 秒", "\(max(seconds, 0))s")
         }
         let minutes = seconds / 60
         if minutes < 60 {
-            return "\(minutes) 分钟"
+            return L("\(minutes) 分钟", "\(minutes)m")
         }
         let hours = minutes / 60
         let remainingMinutes = minutes % 60
         if remainingMinutes == 0 {
-            return "\(hours) 小时"
+            return L("\(hours) 小时", "\(hours)h")
         }
-        return "\(hours) 小时 \(remainingMinutes) 分钟"
+        return L("\(hours) 小时 \(remainingMinutes) 分钟", "\(hours)h \(remainingMinutes)m")
     }
 }
 
@@ -248,9 +254,9 @@ enum IgnoredAssertionKind: String, Codable, Equatable {
     var title: String {
         switch self {
         case .process:
-            return "进程"
+            return L("进程", "Process")
         case .kernel:
-            return "USB / 内核"
+            return L("USB / 内核", "USB / Kernel")
         }
     }
 }
@@ -274,10 +280,10 @@ enum RefreshInterval: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .ten: return "10 秒"
-        case .thirty: return "30 秒"
-        case .sixty: return "60 秒"
-        case .manual: return "手动"
+        case .ten: return L("10 秒", "10 s")
+        case .thirty: return L("30 秒", "30 s")
+        case .sixty: return L("60 秒", "60 s")
+        case .manual: return L("手动", "Manual")
         }
     }
 
@@ -300,13 +306,13 @@ enum SleepLogEventType: String, Codable {
     var displayName: String {
         switch self {
         case .enteringSleep:
-            return "进入睡眠"
+            return L("进入睡眠", "Entering Sleep")
         case .wakeFrom:
-            return "从睡眠唤醒"
+            return L("从睡眠唤醒", "Wake from Sleep")
         case .wakeReason:
-            return "唤醒原因"
+            return L("唤醒原因", "Wake Reason")
         case .darkWake:
-            return "暗唤醒"
+            return L("暗唤醒", "DarkWake")
         }
     }
 }
@@ -342,22 +348,22 @@ enum WakeSuspicion: String, Codable, CaseIterable, Hashable {
     var title: String {
         switch self {
         case .externalDevice:
-            return "外设"
+            return L("外设", "External Device")
         case .bluetooth:
-            return "蓝牙"
+            return L("蓝牙", "Bluetooth")
         case .network:
-            return "网络"
+            return L("网络", "Network")
         }
     }
 
     var explanation: String {
         switch self {
         case .externalDevice:
-            return "疑似外设或 USB 相关唤醒"
+            return L("疑似外设或 USB 相关唤醒", "Possible external device or USB wake")
         case .bluetooth:
-            return "疑似蓝牙设备活动唤醒"
+            return L("疑似蓝牙设备活动唤醒", "Possible Bluetooth device activity wake")
         case .network:
-            return "疑似网络活动或后台维护唤醒"
+            return L("疑似网络活动或后台维护唤醒", "Possible network activity or maintenance wake")
         }
     }
 }
@@ -368,14 +374,15 @@ struct AppVersionInfo: Equatable {
     let bundleIdentifier: String
 
     var displayText: String {
-        "版本 \(version)（构建 \(build)）"
+        L("版本 \(version)（构建 \(build)）", "v\(version) (build \(build))")
     }
 
     static func current(bundle: Bundle = .main) -> AppVersionInfo {
         let info = bundle.infoDictionary ?? [:]
-        let version = info["CFBundleShortVersionString"] as? String ?? "未知"
-        let build = info["CFBundleVersion"] as? String ?? "未知"
-        let bundleIdentifier = bundle.bundleIdentifier ?? "未知"
+        let unknown = L("未知", "Unknown")
+        let version = info["CFBundleShortVersionString"] as? String ?? unknown
+        let build = info["CFBundleVersion"] as? String ?? unknown
+        let bundleIdentifier = bundle.bundleIdentifier ?? unknown
         return AppVersionInfo(version: version, build: build, bundleIdentifier: bundleIdentifier)
     }
 }

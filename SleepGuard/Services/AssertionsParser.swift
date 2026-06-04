@@ -80,7 +80,7 @@ struct AssertionsParser {
     private func parseKernelLine(_ line: String) -> KernelAssertion? {
         let code = firstMatch(pattern: #"(0x[0-9a-fA-F]+=\S+)"#, in: line)?.dropFirst().first ?? "Kernel"
         let description = firstMatch(pattern: #"description=([^\s]+)"#, in: line)?.dropFirst().first ?? ""
-        let owner = firstMatch(pattern: #"owner=(.+)$"#, in: line)?.dropFirst().first ?? "未知 USB 设备"
+        let owner = firstMatch(pattern: #"owner=(.+)$"#, in: line)?.dropFirst().first ?? L("未知 USB 设备", "Unknown USB Device")
         return KernelAssertion(assertionCode: code, owner: owner, description: description, rawLine: line)
     }
 

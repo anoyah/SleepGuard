@@ -9,16 +9,16 @@ struct SleepGuardRootView: View {
             HeaderView(viewModel: viewModel)
             TabView {
                 CurrentStatusView(viewModel: viewModel)
-                    .tabItem { Label("当前状态", systemImage: "gauge.with.dots.needle.67percent") }
+                    .tabItem { Label(L("当前状态", "Status"), systemImage: "gauge.with.dots.needle.67percent") }
 
                 HistoryView(records: viewModel.history)
-                    .tabItem { Label("历史记录", systemImage: "clock.arrow.circlepath") }
+                    .tabItem { Label(L("历史记录", "History"), systemImage: "clock.arrow.circlepath") }
 
                 SleepLogView(viewModel: viewModel)
-                    .tabItem { Label("睡眠日志", systemImage: "bed.double") }
+                    .tabItem { Label(L("睡眠日志", "Sleep Log"), systemImage: "bed.double") }
 
                 SettingsView(viewModel: viewModel)
-                    .tabItem { Label("设置", systemImage: "gearshape") }
+                    .tabItem { Label(L("设置", "Settings"), systemImage: "gearshape") }
             }
             .padding(.top, 4)
         }
@@ -43,11 +43,11 @@ private struct HeaderView: View {
             .animation(.easeInOut(duration: 0.2), value: viewModel.diagnosis?.overallStatus)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(viewModel.diagnosis?.overallStatus.title ?? "正在检测")
+                Text(viewModel.diagnosis?.overallStatus.title ?? L("正在检测", "Detecting"))
                     .font(.headline.weight(.semibold))
                     .animation(.easeInOut(duration: 0.2), value: viewModel.diagnosis?.overallStatus)
                 if let lastRefresh = viewModel.lastRefresh {
-                    Text("上次刷新：\(lastRefresh.formatted(date: .omitted, time: .standard))")
+                    Text(L("上次刷新：", "Last refresh: ") + lastRefresh.formatted(date: .omitted, time: .standard))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -59,7 +59,7 @@ private struct HeaderView: View {
                 RotatingRefreshIcon(isAnimating: viewModel.isRefreshing)
             }
             .buttonStyle(.borderless)
-            .help("刷新")
+            .help(L("刷新", "Refresh"))
             .disabled(viewModel.isRefreshing)
 
             Button {
@@ -68,7 +68,7 @@ private struct HeaderView: View {
                 Image(systemName: "doc.on.doc")
             }
             .buttonStyle(.borderless)
-            .help("复制诊断报告")
+            .help(L("复制诊断报告", "Copy Diagnostic Report"))
 
             Button {
                 NSApplication.shared.terminate(nil)
@@ -76,7 +76,7 @@ private struct HeaderView: View {
                 Image(systemName: "power")
             }
             .buttonStyle(.borderless)
-            .help("退出 SleepGuard")
+            .help(L("退出 SleepGuard", "Quit SleepGuard"))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -92,7 +92,7 @@ private struct CurrentStatusView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 if let error = viewModel.lastError {
-                    InfoCard(title: "错误", systemImage: "exclamationmark.triangle") {
+                    InfoCard(title: L("错误", "Error"), systemImage: "exclamationmark.triangle") {
                         Text(error).foregroundStyle(.red)
                     }
                     .transition(.opacity)
@@ -118,10 +118,10 @@ private struct CurrentStatusView: View {
                     }
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 } else if viewModel.isRefreshing {
-                    ProgressView("正在读取 pmset 输出...")
+                    ProgressView(L("正在读取 pmset 输出...", "Reading pmset output..."))
                         .frame(maxWidth: .infinity, minHeight: 220)
                 } else {
-                    EmptyText("暂无检测结果，请点击“刷新”重试。")
+                    EmptyText(L("暂无检测结果，请点击\"刷新\"重试。", "No results. Click Refresh to retry."))
                         .frame(maxWidth: .infinity, minHeight: 220)
                 }
             }
@@ -136,7 +136,7 @@ private struct SummaryCard: View {
     let diagnosis: SleepDiagnosis
 
     var body: some View {
-        InfoCard(title: "当前状态", systemImage: "moon.zzz") {
+        InfoCard(title: L("当前状态", "Current Status"), systemImage: "moon.zzz") {
             HStack {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(diagnosis.overallStatus.title)
@@ -148,8 +148,8 @@ private struct SummaryCard: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 5) {
-                    CountBadge(title: "严重", value: diagnosis.criticalCount, color: .red)
-                    CountBadge(title: "注意", value: diagnosis.warningCount, color: .yellow)
+                    CountBadge(title: L("严重", "Critical"), value: diagnosis.criticalCount, color: .red)
+                    CountBadge(title: L("注意", "Warning"), value: diagnosis.warningCount, color: .yellow)
                     CountBadge(title: "USB", value: diagnosis.kernelAssertionCount, color: .orange)
                 }
             }
@@ -161,13 +161,13 @@ private struct AssertionFlagsView: View {
     let status: AssertionStatus
 
     var body: some View {
-        InfoCard(title: "系统断言状态", systemImage: "list.bullet.rectangle") {
+        InfoCard(title: L("系统断言状态", "System Assertion State"), systemImage: "list.bullet.rectangle") {
             VStack(alignment: .leading, spacing: 7) {
                 FlagRow(title: SleepAssertionType.preventUserIdleSystemSleep.displayName, active: status.preventUserIdleSystemSleep)
                 FlagRow(title: SleepAssertionType.preventSystemSleep.displayName, active: status.preventSystemSleep)
                 FlagRow(title: SleepAssertionType.preventUserIdleDisplaySleep.displayName, active: status.preventUserIdleDisplaySleep)
                 FlagRow(title: SleepAssertionType.internalPreventSleep.displayName, active: status.internalPreventSleep)
-                FlagRow(title: "内核断言", active: status.hasKernelAssertions)
+                FlagRow(title: L("内核断言", "Kernel Assertions"), active: status.hasKernelAssertions)
             }
         }
     }
@@ -195,9 +195,9 @@ private struct ProcessAssertionsView: View {
     let onIgnore: (AnalyzedProcessAssertion) -> Void
 
     var body: some View {
-        InfoCard(title: "阻止休眠的进程", systemImage: "app.badge") {
+        InfoCard(title: L("阻止休眠的进程", "Sleep-Blocking Processes"), systemImage: "app.badge") {
             if items.isEmpty {
-                EmptyText("未发现进程持有休眠阻止项")
+                EmptyText(L("未发现进程持有休眠阻止项", "No processes holding sleep assertions"))
             } else {
                 VStack(spacing: 8) {
                     ForEach(items) { item in
@@ -220,7 +220,7 @@ private struct ProcessRow: View {
                 Text(item.assertion.processName)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
-                Text("进程 ID \(item.assertion.pid)")
+                Text(L("进程 ID \(item.assertion.pid)", "PID \(item.assertion.pid)"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -231,7 +231,7 @@ private struct ProcessRow: View {
                     Image(systemName: "eye.slash")
                 }
                 .buttonStyle(.borderless)
-                .help("忽略该进程阻止项")
+                .help(L("忽略该进程阻止项", "Ignore this process assertion"))
             }
             Text("\(SleepAssertionType(rawPMSetValue: item.assertion.assertionType).displayName) · \(item.assertion.duration)")
                 .font(.caption)
@@ -262,9 +262,9 @@ private struct KernelAssertionsView: View {
     let onIgnore: (AnalyzedKernelAssertion) -> Void
 
     var body: some View {
-        InfoCard(title: "USB 与内核断言", systemImage: "cable.connector") {
+        InfoCard(title: L("USB 与内核断言", "USB & Kernel Assertions"), systemImage: "cable.connector") {
             if items.isEmpty {
-                EmptyText("未发现 USB 内核断言")
+                EmptyText(L("未发现 USB 内核断言", "No USB kernel assertions found"))
             } else {
                 VStack(spacing: 8) {
                     ForEach(items) { item in
@@ -281,7 +281,7 @@ private struct KernelAssertionsView: View {
                                     Image(systemName: "eye.slash")
                                 }
                                 .buttonStyle(.borderless)
-                                .help("忽略该 USB / 内核断言")
+                                .help(L("忽略该 USB / 内核断言", "Ignore this USB/kernel assertion"))
                             }
                             Text(item.assertion.assertionCode)
                                 .font(.caption)
@@ -312,7 +312,7 @@ private struct IgnoredAssertionsView: View {
 
     var body: some View {
         if processItems.isEmpty == false || kernelItems.isEmpty == false {
-            InfoCard(title: "已忽略项", systemImage: "eye.slash") {
+            InfoCard(title: L("已忽略项", "Ignored Items"), systemImage: "eye.slash") {
                 VStack(spacing: 8) {
                     ForEach(processItems) { item in
                         IgnoredItemRow(
@@ -335,7 +335,7 @@ private struct IgnoredAssertionsView: View {
                         if item.id != kernelItems.last?.id { Divider() }
                     }
                 }
-                Text("已忽略项未参与整体判断。")
+                Text(L("已忽略项未参与整体判断。", "Ignored items are excluded from the overall assessment."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -363,7 +363,7 @@ private struct IgnoredItemRow: View {
                     Image(systemName: "eye")
                 }
                 .buttonStyle(.borderless)
-                .help("取消忽略")
+                .help(L("取消忽略", "Un-ignore"))
             }
             Text(subtitle)
                 .font(.caption)
@@ -384,7 +384,7 @@ private struct RecommendationsView: View {
     let recommendations: [String]
 
     var body: some View {
-        InfoCard(title: "推荐处理建议", systemImage: "lightbulb") {
+        InfoCard(title: L("推荐处理建议", "Recommendations"), systemImage: "lightbulb") {
             VStack(alignment: .leading, spacing: 7) {
                 ForEach(recommendations, id: \.self) { item in
                     HStack(alignment: .top, spacing: 8) {
@@ -416,15 +416,21 @@ private struct HistoryView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Text("严重 \(record.criticalCount) · 注意 \(record.warningCount) · USB \(record.kernelAssertionCount)")
+                Text(L(
+                    "严重 \(record.criticalCount) · 注意 \(record.warningCount) · USB \(record.kernelAssertionCount)",
+                    "Critical \(record.criticalCount) · Warning \(record.warningCount) · USB \(record.kernelAssertionCount)"
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                if let assertionSnapshots = record.assertionSnapshots, assertionSnapshots.isEmpty == false {
+                    Text(L(
+                        "记录 \(assertionSnapshots.count) 个阻止项快照",
+                        "\(assertionSnapshots.count) assertion snapshot(s) recorded"
+                    ))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if let assertionSnapshots = record.assertionSnapshots, assertionSnapshots.isEmpty == false {
-                    Text("记录 \(assertionSnapshots.count) 个阻止项快照")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
-                Text(record.summary)
+                Text(record.status.summary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -441,15 +447,17 @@ private struct SleepLogView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 if viewModel.isSleepLogRefreshing {
-                    BreathingLabel("正在读取睡眠日志", systemImage: "hourglass", isAnimating: true)
+                    BreathingLabel(L("正在读取睡眠日志", "Reading sleep log"), systemImage: "hourglass", isAnimating: true)
                 } else if let sleepLog = viewModel.sleepLog {
                     Label(
-                        sleepLog.sleptLastNight ? "昨晚发现睡眠记录" : "昨晚未发现睡眠记录",
+                        sleepLog.sleptLastNight
+                            ? L("昨晚发现睡眠记录", "Sleep detected last night")
+                            : L("昨晚未发现睡眠记录", "No sleep detected last night"),
                         systemImage: sleepLog.sleptLastNight ? "checkmark.circle.fill" : "exclamationmark.circle"
                     )
                     .foregroundStyle(sleepLog.sleptLastNight ? .green : .orange)
                 } else {
-                    Label("尚未读取睡眠日志", systemImage: "bed.double")
+                    Label(L("尚未读取睡眠日志", "Sleep log not loaded"), systemImage: "bed.double")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -459,19 +467,22 @@ private struct SleepLogView: View {
                     RotatingRefreshIcon(isAnimating: viewModel.isSleepLogRefreshing)
                 }
                 .buttonStyle(.borderless)
-                .help("刷新日志")
+                .help(L("刷新日志", "Refresh Log"))
                 .disabled(viewModel.isSleepLogRefreshing)
             }
             .padding([.top, .horizontal], 12)
 
             if let error = viewModel.sleepLogError {
-                InfoCard(title: "睡眠日志读取失败", systemImage: "exclamationmark.triangle") {
+                InfoCard(title: L("睡眠日志读取失败", "Failed to Read Sleep Log"), systemImage: "exclamationmark.triangle") {
                     Text(error)
                         .font(.caption)
                         .foregroundStyle(.red)
-                    Text("可以稍后重试；当前状态检测不依赖睡眠日志。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text(L(
+                        "可以稍后重试；当前状态检测不依赖睡眠日志。",
+                        "You can retry later. Status detection does not depend on the sleep log."
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 16)
             } else if let sleepLog = viewModel.sleepLog {
@@ -497,16 +508,19 @@ private struct SleepLogView: View {
                     .listStyle(.inset)
                 }
             } else if viewModel.isSleepLogRefreshing {
-                ProgressView("正在读取睡眠日志...")
+                ProgressView(L("正在读取睡眠日志...", "Reading sleep log..."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 VStack(spacing: 10) {
                     Image(systemName: "bed.double")
                         .font(.largeTitle)
                         .foregroundStyle(.secondary)
-                    Text("点击“刷新日志”读取最近 100 条睡眠/唤醒记录。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text(L(
+                        "点击\"刷新日志\"读取最近 100 条睡眠/唤醒记录。",
+                        "Click \"Refresh Log\" to load the last 100 sleep/wake events."
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -524,22 +538,30 @@ private struct SleepQualitySummaryCard: View {
     let summary: SleepLogSummary
 
     var body: some View {
-        InfoCard(title: "睡眠质量摘要", systemImage: "waveform.path.ecg") {
+        InfoCard(title: L("睡眠质量摘要", "Sleep Quality Summary"), systemImage: "waveform.path.ecg") {
             VStack(alignment: .leading, spacing: 8) {
                 SummaryMetricRow(
-                    title: "昨晚是否睡眠",
-                    value: summary.sleptLastNight ? "是" : "未发现",
+                    title: L("昨晚是否睡眠", "Slept Last Night"),
+                    value: summary.sleptLastNight ? L("是", "Yes") : L("未发现", "Not detected"),
                     color: summary.sleptLastNight ? .green : .orange
                 )
-                SummaryMetricRow(title: "唤醒次数", value: "\(summary.wakeCount) 次", color: summary.wakeCount == 0 ? .secondary : .orange)
-                SummaryMetricRow(title: "DarkWake 次数", value: "\(summary.darkWakeCount) 次", color: summary.darkWakeCount == 0 ? .secondary : .orange)
                 SummaryMetricRow(
-                    title: "最近唤醒原因",
-                    value: summary.recentWakeReason?.detail ?? "未发现",
+                    title: L("唤醒次数", "Wake Count"),
+                    value: L("\(summary.wakeCount) 次", "\(summary.wakeCount) time(s)"),
+                    color: summary.wakeCount == 0 ? .secondary : .orange
+                )
+                SummaryMetricRow(
+                    title: L("DarkWake 次数", "DarkWake Count"),
+                    value: L("\(summary.darkWakeCount) 次", "\(summary.darkWakeCount) time(s)"),
+                    color: summary.darkWakeCount == 0 ? .secondary : .orange
+                )
+                SummaryMetricRow(
+                    title: L("最近唤醒原因", "Last Wake Reason"),
+                    value: summary.recentWakeReason?.detail ?? L("未发现", "Not detected"),
                     color: summary.recentWakeReason == nil ? .secondary : .primary
                 )
                 SummaryMetricRow(
-                    title: "疑似唤醒来源",
+                    title: L("疑似唤醒来源", "Suspicious Wake"),
                     value: suspiciousWakeText,
                     color: summary.hasSuspiciousWake ? .orange : .secondary
                 )
@@ -549,9 +571,9 @@ private struct SleepQualitySummaryCard: View {
 
     private var suspiciousWakeText: String {
         guard summary.suspiciousWakeReasons.isEmpty == false else {
-            return "未发现明显外设/蓝牙/网络迹象"
+            return L("未发现明显外设/蓝牙/网络迹象", "No suspicious device/bluetooth/network activity")
         }
-        return summary.suspiciousWakeReasons.map(\.explanation).joined(separator: "、")
+        return summary.suspiciousWakeReasons.map(\.explanation).joined(separator: L("、", ", "))
     }
 }
 
@@ -687,7 +709,7 @@ private struct SettingsView: View {
     var body: some View {
         Form {
             Toggle(
-                "登录时自动启动",
+                L("登录时自动启动", "Launch at Login"),
                 isOn: Binding(
                     get: { viewModel.isLaunchAtLoginEnabled },
                     set: { viewModel.setLaunchAtLoginEnabled($0) }
@@ -699,7 +721,7 @@ private struct SettingsView: View {
                     .foregroundStyle(.red)
             }
 
-            Picker("自动刷新", selection: $viewModel.settings.refreshInterval) {
+            Picker(L("自动刷新", "Auto Refresh"), selection: $viewModel.settings.refreshInterval) {
                 ForEach(RefreshInterval.allCases) { interval in
                     Text(interval.title).tag(interval)
                 }
@@ -708,9 +730,9 @@ private struct SettingsView: View {
                 viewModel.restartAutoRefresh()
             }
 
-            Section("已忽略规则") {
+            Section(L("已忽略规则", "Ignored Rules")) {
                 if viewModel.settings.ignoredRules.isEmpty {
-                    Text("暂无忽略规则")
+                    Text(L("暂无忽略规则", "No ignored rules"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
@@ -731,15 +753,15 @@ private struct SettingsView: View {
                                 Image(systemName: "trash")
                             }
                             .buttonStyle(.borderless)
-                            .help("删除忽略规则")
+                            .help(L("删除忽略规则", "Delete ignored rule"))
                         }
                     }
                 }
             }
 
-            Section("版本信息") {
+            Section(L("版本信息", "Version")) {
                 HStack {
-                    Text("应用版本")
+                    Text(L("应用版本", "App Version"))
                     Spacer()
                     Text(versionInfo.displayText)
                         .foregroundStyle(.secondary)
@@ -754,9 +776,12 @@ private struct SettingsView: View {
                 }
             }
 
-            Text("SleepGuard 只读取 pmset 输出，不会终止进程或修改系统设置。危险操作只会以建议形式展示。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Text(L(
+                "SleepGuard 只读取 pmset 输出，不会终止进程或修改系统设置。危险操作只会以建议形式展示。",
+                "SleepGuard only reads pmset output. It never kills processes or modifies system settings. Risky actions are shown as suggestions only."
+            ))
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
         .padding(12)

@@ -1,98 +1,100 @@
 # SleepGuard
 
-SleepGuard 是一个 macOS 菜单栏应用，用于排查 Mac 无法自动休眠、频繁被唤醒或被外设持续阻止睡眠的问题。应用会读取系统 `pmset` 输出，解析进程断言、USB/内核断言和睡眠日志，并给出风险分级与处理建议。
+English | [简体中文](README.zh-CN.md)
 
-## 界面截图
+SleepGuard is a macOS menu bar app for diagnosing why your Mac will not sleep automatically, keeps waking up, or stays blocked by external devices. It reads local `pmset` output, analyzes process assertions, USB/kernel assertions, and sleep logs, then highlights risks with practical troubleshooting suggestions.
+
+## Screenshots
 
 |  |  |  |  |
 | --- | --- | --- | --- |
 | <img src="Screenshot/1.png" alt="SleepGuard screenshot 1" width="220"> | <img src="Screenshot/2.png" alt="SleepGuard screenshot 2" width="220"> | <img src="Screenshot/3.png" alt="SleepGuard screenshot 3" width="220"> | <img src="Screenshot/4.png" alt="SleepGuard screenshot 4" width="220"> |
 
-## 功能特性
+## Features
 
-- 菜单栏常驻：通过菜单栏图标快速查看当前休眠风险状态。
-- 当前状态诊断：解析 `pmset -g assertions`，识别阻止休眠的进程、断言类型、持续时间和原因。
-- 风险分级：将常见阻止项分为正常、注意、严重和 USB 注意，优先标出需要处理的问题。
-- USB 与内核断言排查：提示扩展坞、Hub、鼠标接收器、转接器等外设可能造成的睡眠影响。
-- 睡眠日志摘要：读取最近睡眠、唤醒、DarkWake 和 Wake reason 记录，辅助判断是否存在异常唤醒。
-- 历史记录与趋势：保存最近 200 次诊断记录，并展示阻止项连续出现的次数与持续时间。
-- 忽略规则：可忽略已知正常的进程或外设断言，避免影响整体判断。
-- 诊断报告：一键复制包含状态、原始断言、趋势和建议的文本报告。
-- 自动刷新与登录启动：支持设置刷新间隔，并可开启登录时启动。
+- Menu bar status: quickly inspect current sleep risk from the macOS menu bar.
+- Current diagnosis: parses `pmset -g assertions` to identify blocking processes, assertion types, durations, and reasons.
+- Risk levels: classifies common blockers as normal, warning, critical, or USB warning.
+- USB and kernel assertion checks: points out docks, hubs, receivers, adapters, and other devices that may affect sleep.
+- Sleep log summary: reads recent sleep, wake, DarkWake, and Wake reason records to help diagnose abnormal wake-ups.
+- History and trends: stores the latest 200 diagnosis records and shows recurring blockers with observed duration.
+- Ignore rules: hide known-safe process or device assertions so they no longer affect the overall status.
+- Diagnostic report: copy a text report with status, raw assertions, trends, and recommendations.
+- Auto refresh and launch at login: configure refresh intervals and optionally start SleepGuard when you log in.
 
-## 系统要求
+## Requirements
 
-- macOS 13.0 或更高版本
-- Xcode 15 或更高版本
+- macOS 13.0 or later
+- Xcode 15 or later
 - Swift 5
 
-## 使用方式
+## Usage
 
-1. 使用 Xcode 打开 `SleepGuard.xcodeproj`。
-2. 选择 `SleepGuard` scheme。
-3. 构建并运行应用。
-4. 在菜单栏点击 SleepGuard 图标查看诊断结果。
+1. Open `SleepGuard.xcodeproj` in Xcode.
+2. Select the `SleepGuard` scheme.
+3. Build and run the app.
+4. Click the SleepGuard icon in the menu bar to view the diagnosis.
 
-应用不会主动终止进程，也不会修改系统电源设置。所有诊断基于本机命令输出和本地历史记录。
+SleepGuard does not terminate processes or change system power settings. All diagnostics are based on local command output and local history.
 
-## 命令行构建
+## Build From Command Line
 
 ```sh
 xcodebuild -project SleepGuard.xcodeproj -scheme SleepGuard -configuration Debug build
 ```
 
-## 运行测试
+## Run Tests
 
 ```sh
 xcodebuild test -project SleepGuard.xcodeproj -scheme SleepGuard -destination 'platform=macOS'
 ```
 
-测试覆盖了 `pmset` 断言解析、风险分类、报告生成、趋势分析、忽略规则和设置持久化等核心逻辑。
+The tests cover `pmset` assertion parsing, risk classification, report generation, trend analysis, ignore rules, and settings persistence.
 
-## 数据与隐私
+## Data And Privacy
 
-SleepGuard 只在本机运行诊断，不上传数据。
+SleepGuard runs locally and does not upload data.
 
-- 休眠断言来自 `/usr/bin/pmset -g assertions`。
-- 睡眠日志来自 `/usr/bin/pmset -g log` 的本地输出筛选。
-- 历史记录保存在用户目录的 Application Support 下：`SleepGuard/history.json`。
-- 刷新间隔和忽略规则保存在 `UserDefaults`。
-- 复制报告时，报告内容会写入系统剪贴板。
+- Sleep assertions come from `/usr/bin/pmset -g assertions`.
+- Sleep logs come from filtered local output of `/usr/bin/pmset -g log`.
+- History is stored under the user's Application Support directory: `SleepGuard/history.json`.
+- Refresh interval and ignore rules are stored in `UserDefaults`.
+- When you copy a report, the generated text is written to the system clipboard.
 
-## 风险判断说明
+## Risk Classification
 
-SleepGuard 会根据断言类型、持续时间、进程名称和原因文本进行启发式判断。例如：
+SleepGuard uses heuristic checks based on assertion type, duration, process name, and reason text. For example:
 
-- `PreventSystemSleep` 和 `InternalPreventSleep` 通常视为严重。
-- 长时间存在的 `PreventUserIdleSystemSleep` 会被提升为严重。
-- 音频、备份、接力、蓝牙等常见系统活动通常先标记为注意。
-- `powerd` 在屏幕亮起时阻止空闲睡眠通常属于正常行为。
-- USB 内核断言会提示逐个排查扩展坞、Hub、接收器或转接器。
+- `PreventSystemSleep` and `InternalPreventSleep` are usually treated as critical.
+- Long-running `PreventUserIdleSystemSleep` assertions are raised to critical.
+- Audio, backup, Handoff, and Bluetooth activity usually start as warnings.
+- `powerd` preventing idle sleep while the display is on is usually normal system behavior.
+- USB kernel assertions suggest checking docks, hubs, receivers, and adapters one by one.
 
-这些判断用于辅助定位问题，不替代系统日志的完整人工分析。
+These checks are meant to help locate the likely cause. They do not replace full manual analysis of system logs.
 
-## 项目结构
+## Project Structure
 
 ```text
 SleepGuard/
-  SleepGuardApp.swift              # 菜单栏应用入口
-  Models/                          # 诊断、断言、历史和日志模型
-  ViewModels/                       # 应用状态、刷新流程和用户操作
-  Views/                            # SwiftUI 菜单栏窗口界面
-  Services/                         # pmset 调用、解析、分析、报告和持久化
+  SleepGuardApp.swift              # Menu bar app entry point
+  Models/                          # Diagnosis, assertion, history, and log models
+  ViewModels/                       # App state, refresh flow, and user actions
+  Views/                            # SwiftUI menu bar window UI
+  Services/                         # pmset runner, parsers, analyzers, reports, persistence
 SleepGuardTests/
-  SleepGuardTests.swift             # 核心单元测试
-SleepGuard.xcodeproj/               # Xcode 项目
+  SleepGuardTests.swift             # Core unit tests
+SleepGuard.xcodeproj/               # Xcode project
 ```
 
-## 常见排查流程
+## Troubleshooting Flow
 
-1. 点击刷新，查看整体状态是否为“严重”或“注意”。
-2. 优先处理红色严重项目，手动退出对应应用或关闭相关后台登录项。
-3. 如果出现 USB / 内核断言，先拔掉扩展坞、Hub、鼠标接收器或转接器，再逐个接回确认来源。
-4. 查看“睡眠日志”，确认昨晚是否有睡眠记录，以及是否存在蓝牙、USB、网络相关唤醒迹象。
-5. 对确认无害的项目使用忽略功能，后续诊断将不再把它计入整体状态。
+1. Click refresh and check whether the overall status is warning or critical.
+2. Handle critical items first by manually quitting the related app or disabling its background login item.
+3. If USB or kernel assertions appear, unplug docks, hubs, receivers, or adapters, then reconnect them one by one.
+4. Check Sleep Log to see whether sleep happened last night and whether Bluetooth, USB, or network wake signs appear.
+5. Ignore items that you have confirmed are harmless so they no longer affect the overall diagnosis.
 
 ## License
 
-本项目使用 [LICENSE](LICENSE) 中声明的许可证。
+This project is licensed under the terms in [LICENSE](LICENSE).

@@ -162,7 +162,8 @@ final class SleepGuardViewModel: ObservableObject {
             try launchAtLoginManager.setEnabled(enabled)
             objectWillChange.send()
         } catch {
-            launchAtLoginError = "无法更新登录项：\(error.localizedDescription)"
+            launchAtLoginError = L("无法更新登录项：\(error.localizedDescription)",
+                                   "Failed to update login item: \(error.localizedDescription)")
             objectWillChange.send()
         }
     }

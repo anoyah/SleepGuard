@@ -12,9 +12,9 @@ enum PMSetCommandError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .nonZeroExit(command, status, stderr):
-            return "\(command) 退出码 \(status)：\(stderr)"
+            return L("\(command) 退出码 \(status)：\(stderr)", "\(command) exited with code \(status): \(stderr)")
         case .invalidOutputEncoding:
-            return "无法读取 pmset 输出。"
+            return L("无法读取 pmset 输出。", "Failed to read pmset output.")
         }
     }
 }
