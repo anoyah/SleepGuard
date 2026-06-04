@@ -268,6 +268,30 @@ struct IgnoredAssertionRule: Codable, Identifiable, Equatable {
     let name: String
     let detail: String
     let createdAt: Date
+
+    var localizedDetail: String {
+        guard kind == .process else { return detail }
+        let separator = " · "
+        guard let separatorRange = detail.range(of: separator) else { return detail }
+        let originalDetail = String(detail[separatorRange.upperBound...])
+        guard let assertionType = processAssertionTypeFromSignature else { return detail }
+        return "\(assertionType.displayName)\(separator)\(originalDetail)"
+    }
+
+    private var processAssertionTypeFromSignature: SleepAssertionType? {
+        let parts = signature.split(separator: "|", omittingEmptySubsequences: false)
+        guard parts.count >= 3 else { return nil }
+        let typeKey = String(parts[2])
+        return SleepAssertionType.allCases.first { $0.rawValue.normalizedIgnoredRuleKey == typeKey }
+    }
+}
+
+private extension String {
+    var normalizedIgnoredRuleKey: String {
+        trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+    }
 }
 
 enum RefreshInterval: String, CaseIterable, Identifiable {

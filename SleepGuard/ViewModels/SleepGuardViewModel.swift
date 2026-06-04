@@ -14,6 +14,7 @@ final class SleepGuardViewModel: ObservableObject {
     @Published private(set) var sleepLogError: String?
     @Published private(set) var launchAtLoginError: String?
     @Published private(set) var lastRefresh: Date?
+    @Published private(set) var localizationRevision = 0
     @Published var settings = SettingsStore()
 
     private let runner: PMSetRunning
@@ -50,6 +51,17 @@ final class SleepGuardViewModel: ObservableObject {
         self.historyStore = historyStore
         self.launchAtLoginManager = launchAtLoginManager
         self.history = Array(historyStore.load().reversed())
+
+        SleepGuardLocalization.appLanguage = settings.appLanguage
+
+        settings.$appLanguage
+            .dropFirst()
+            .sink { [weak self] language in
+                SleepGuardLocalization.appLanguage = language
+                self?.localizationRevision += 1
+                self?.relocalizeCurrentState()
+            }
+            .store(in: &cancellables)
 
         settings.$refreshInterval
             .dropFirst()
@@ -91,10 +103,7 @@ final class SleepGuardViewModel: ObservableObject {
             let assertionsOutput = try await runner.assertions()
             let parsedAssertions = assertionsParser.parse(assertionsOutput)
             let now = Date()
-            let storedHistory = historyStore.load()
-            let analyzedDiagnosis = riskAnalyzer.analyze(parsedAssertions)
-            let trendedDiagnosis = trendAnalyzer.attachTrends(to: analyzedDiagnosis, history: storedHistory, now: now)
-            let newDiagnosis = ignoredMatcher.apply(rules: settings.ignoredRules, to: trendedDiagnosis)
+            let newDiagnosis = makeDiagnosis(from: parsedAssertions, now: now)
             diagnosis = newDiagnosis
             lastRefresh = now
             appendHistory(for: newDiagnosis, at: now)
@@ -114,10 +123,7 @@ final class SleepGuardViewModel: ObservableObject {
             let output = try await runner.assertions()
             let parsed = assertionsParser.parse(output)
             let now = Date()
-            let storedHistory = historyStore.load()
-            let analyzedDiagnosis = riskAnalyzer.analyze(parsed)
-            let trendedDiagnosis = trendAnalyzer.attachTrends(to: analyzedDiagnosis, history: storedHistory, now: now)
-            let newDiagnosis = ignoredMatcher.apply(rules: settings.ignoredRules, to: trendedDiagnosis)
+            let newDiagnosis = makeDiagnosis(from: parsed, now: now)
             diagnosis = newDiagnosis
             lastRefresh = now
             appendHistory(for: newDiagnosis, at: now)
@@ -213,20 +219,23 @@ final class SleepGuardViewModel: ObservableObject {
         history = Array(historyStore.load().reversed())
     }
 
+    private func makeDiagnosis(from parsed: ParsedAssertions, now: Date) -> SleepDiagnosis {
+        let storedHistory = historyStore.load()
+        let analyzedDiagnosis = riskAnalyzer.analyze(parsed)
+        let trendedDiagnosis = trendAnalyzer.attachTrends(to: analyzedDiagnosis, history: storedHistory, now: now)
+        return ignoredMatcher.apply(rules: settings.ignoredRules, to: trendedDiagnosis)
+    }
+
+    private func relocalizeCurrentState() {
+        guard let diagnosis else {
+            objectWillChange.send()
+            return
+        }
+        self.diagnosis = makeDiagnosis(from: diagnosis.parsed, now: lastRefresh ?? diagnosis.parsed.capturedAt)
+    }
+
     private func reapplyIgnoredRules() {
         guard let diagnosis else { return }
-        let allItemsDiagnosis = SleepDiagnosis(
-            parsed: diagnosis.parsed,
-            overallStatus: diagnosis.overallStatus,
-            processItems: diagnosis.processItems + diagnosis.ignoredProcessItems,
-            kernelItems: diagnosis.kernelItems + diagnosis.ignoredKernelItems,
-            ignoredProcessItems: [],
-            ignoredKernelItems: [],
-            recommendations: diagnosis.recommendations,
-            criticalCount: diagnosis.criticalCount,
-            warningCount: diagnosis.warningCount,
-            kernelAssertionCount: diagnosis.kernelAssertionCount
-        )
-        self.diagnosis = ignoredMatcher.apply(rules: settings.ignoredRules, to: allItemsDiagnosis)
+        self.diagnosis = makeDiagnosis(from: diagnosis.parsed, now: lastRefresh ?? diagnosis.parsed.capturedAt)
     }
 }

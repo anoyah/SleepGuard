@@ -23,6 +23,7 @@ struct SleepGuardRootView: View {
                     .tag(2)
             }
             .padding(.top, 4)
+            .id(viewModel.localizationRevision)
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
@@ -884,6 +885,12 @@ private struct SettingsView: View {
                     .foregroundStyle(.red)
             }
 
+            Picker(L("语言", "Language"), selection: $viewModel.settings.appLanguage) {
+                ForEach(AppLanguage.allCases) { language in
+                    Text(language.title).tag(language)
+                }
+            }
+
             Picker(L("自动刷新", "Auto Refresh"), selection: $viewModel.settings.refreshInterval) {
                 ForEach(RefreshInterval.allCases) { interval in
                     Text(interval.title).tag(interval)
@@ -901,7 +908,7 @@ private struct SettingsView: View {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(rule.name)
                                     .font(.subheadline.weight(.semibold))
-                                Text("\(rule.kind.title) · \(rule.detail)")
+                                Text("\(rule.kind.title) · \(rule.localizedDetail)")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)
@@ -945,6 +952,7 @@ private struct SettingsView: View {
         }
         .formStyle(.grouped)
         .padding(12)
+        .id(viewModel.localizationRevision)
     }
 }
 

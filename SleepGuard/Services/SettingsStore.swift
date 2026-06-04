@@ -2,6 +2,12 @@ import Combine
 import Foundation
 
 final class SettingsStore: ObservableObject {
+    @Published var appLanguage: AppLanguage {
+        didSet {
+            defaults.set(appLanguage.rawValue, forKey: appLanguageKey)
+        }
+    }
+
     @Published var refreshInterval: RefreshInterval {
         didSet {
             defaults.set(refreshInterval.rawValue, forKey: refreshIntervalKey)
@@ -15,11 +21,14 @@ final class SettingsStore: ObservableObject {
     }
 
     private let defaults: UserDefaults
+    private let appLanguageKey = "appLanguage"
     private let refreshIntervalKey = "refreshInterval"
     private let ignoredRulesKey = "ignoredRules"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        let languageValue = defaults.string(forKey: appLanguageKey) ?? AppLanguage.system.rawValue
+        self.appLanguage = AppLanguage(rawValue: languageValue) ?? .system
         let value = defaults.string(forKey: refreshIntervalKey) ?? RefreshInterval.thirty.rawValue
         self.refreshInterval = RefreshInterval(rawValue: value) ?? .thirty
         self.ignoredRules = Self.loadIgnoredRules(from: defaults, key: ignoredRulesKey)

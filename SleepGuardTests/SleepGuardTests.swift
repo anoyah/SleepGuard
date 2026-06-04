@@ -9,6 +9,7 @@ final class SleepGuardTests: XCTestCase {
 
     override func tearDown() {
         SleepGuardLocalization.preferredLanguageOverride = nil
+        SleepGuardLocalization.appLanguage = .system
         super.tearDown()
     }
 
@@ -271,6 +272,44 @@ final class SleepGuardTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
     }
 
+    func testSettingsStorePersistsAppLanguage() {
+        let suiteName = "SleepGuardTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let store = SettingsStore(defaults: defaults)
+        store.appLanguage = .en
+        let reloaded = SettingsStore(defaults: defaults)
+
+        XCTAssertEqual(reloaded.appLanguage, .en)
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    func testLocalizationUsesConfiguredAppLanguage() {
+        SleepGuardLocalization.preferredLanguageOverride = nil
+        SleepGuardLocalization.appLanguage = .en
+
+        XCTAssertEqual(L("设置", "Settings"), "Settings")
+
+        SleepGuardLocalization.appLanguage = .zhHans
+
+        XCTAssertEqual(L("设置", "Settings"), "设置")
+    }
+
+    func testIgnoredProcessRuleDetailRelocalizesDisplayName() {
+        SleepGuardLocalization.preferredLanguageOverride = nil
+        SleepGuardLocalization.appLanguage = .zhHans
+        let rule = IgnoredAssertionRule(
+            signature: "process|coreaudiod|preventuseridlesystemsleep|com.apple.audio.context.preventuseridlesleep",
+            kind: .process,
+            name: "coreaudiod",
+            detail: "Prevent User Idle System Sleep · com.apple.audio.context.preventuseridlesleep",
+            createdAt: Date(timeIntervalSince1970: 0)
+        )
+
+        XCTAssertEqual(rule.localizedDetail, "防止系统空闲睡眠 · com.apple.audio.context.preventuseridlesleep")
+    }
+
     @MainActor
     func testLaunchAtLoginManagerCanBeMockedFromViewModel() {
         let manager = MockLaunchAtLoginManager()
@@ -284,6 +323,45 @@ final class SleepGuardTests: XCTestCase {
         XCTAssertTrue(manager.isEnabled)
         XCTAssertEqual(manager.requestedValues, [true])
         XCTAssertNil(viewModel.launchAtLoginError)
+    }
+
+    @MainActor
+    func testViewModelRelocalizesCurrentDiagnosisWhenLanguageChanges() async {
+        SleepGuardLocalization.preferredLanguageOverride = nil
+        SleepGuardLocalization.appLanguage = .system
+        let runner = MockPMSetRunner(assertionsOutput: """
+        2026-06-03 18:37:44 +0800
+        Assertion status system-wide:
+           PreventUserIdleSystemSleep     1
+        Listed by owning process:
+           pid 384(coreaudiod): [0x00066e4300099f2e] 00:40:00 PreventUserIdleSystemSleep named: "com.apple.audio.context.preventuseridlesleep"
+        """)
+        let viewModel = SleepGuardViewModel(
+            runner: runner,
+            historyStore: LocalHistoryStore(fileURL: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        )
+
+        viewModel.settings.appLanguage = .en
+        await viewModel.refreshAssertionsOnly()
+
+        XCTAssertEqual(
+            viewModel.diagnosis?.processItems.first?.analysis.explanation,
+            "The system audio service is held by an input or output device — likely music, a call, microphone, or a virtual audio device."
+        )
+        XCTAssertTrue(
+            viewModel.diagnosis?.recommendations.contains("Address critical (red) items first: quit the app or disable its Login Item, then refresh to verify.") == true
+        )
+
+        viewModel.settings.appLanguage = .zhHans
+
+        XCTAssertEqual(
+            viewModel.diagnosis?.processItems.first?.analysis.explanation,
+            "系统音频服务被输入或输出设备占用，可能来自音乐、通话、麦克风或虚拟音频设备。"
+        )
+        XCTAssertTrue(
+            viewModel.diagnosis?.recommendations.contains("优先处理红色项目：手动退出对应应用或关闭其后台登录项，然后刷新验证。") == true
+        )
+        XCTAssertEqual(viewModel.localizationRevision, 2)
     }
 
     func testDisplayNamesUseChineseLabels() {
@@ -401,5 +479,18 @@ private final class MockLaunchAtLoginManager: LaunchAtLoginManaging {
     func setEnabled(_ enabled: Bool) throws {
         requestedValues.append(enabled)
         isEnabled = enabled
+    }
+}
+
+private struct MockPMSetRunner: PMSetRunning {
+    let assertionsOutput: String
+    var logOutput = ""
+
+    func assertions() async throws -> String {
+        assertionsOutput
+    }
+
+    func log() async throws -> String {
+        logOutput
     }
 }
