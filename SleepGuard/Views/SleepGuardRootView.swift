@@ -37,6 +37,7 @@ struct SleepGuardRootView: View {
 private struct HeaderView: View {
     @ObservedObject var viewModel: SleepGuardViewModel
     @State private var showSettings = false
+    @State private var showCopied = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -77,11 +78,17 @@ private struct HeaderView: View {
 
             Button {
                 viewModel.copyReport()
+                withAnimation(.easeInOut(duration: 0.15)) { showCopied = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    withAnimation(.easeInOut(duration: 0.15)) { showCopied = false }
+                }
             } label: {
-                Image(systemName: "doc.on.doc")
+                Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                    .frame(width: 16, height: 16)
             }
             .buttonStyle(.borderless)
             .help(L("复制诊断报告", "Copy Diagnostic Report"))
+            .foregroundStyle(showCopied ? .green : .primary)
 
             Button {
                 showSettings = true
@@ -114,8 +121,11 @@ private struct HeaderView: View {
         if seconds < 10 { return L("刚刚刷新", "Just refreshed") }
         if seconds < 60 { return L("\(seconds) 秒前", "\(seconds)s ago") }
         let minutes = seconds / 60
-        if minutes == 1 { return L("1 分钟前", "1m ago") }
-        return L("\(minutes) 分钟前", "\(minutes)m ago")
+        if minutes < 60 {
+            return minutes == 1 ? L("1 分钟前", "1m ago") : L("\(minutes) 分钟前", "\(minutes)m ago")
+        }
+        let hours = minutes / 60
+        return hours == 1 ? L("1 小时前", "1h ago") : L("\(hours) 小时前", "\(hours)h ago")
     }
 }
 
@@ -300,6 +310,7 @@ private struct FlagRow: View {
 private struct ProcessAssertionsView: View {
     let items: [AnalyzedProcessAssertion]
     let onIgnore: (AnalyzedProcessAssertion) -> Void
+    @State private var expandedIDs: Set<String> = []
 
     var body: some View {
         InfoCard(title: L("阻止休眠的进程", "Sleep-Blocking Processes"), systemImage: "app.badge") {
@@ -308,19 +319,37 @@ private struct ProcessAssertionsView: View {
             } else {
                 VStack(spacing: 8) {
                     ForEach(items) { item in
-                        ProcessRow(item: item, onIgnore: onIgnore)
+                        ProcessRow(
+                            item: item,
+                            isExpanded: expandedIDs.contains(item.id),
+                            onToggle: {
+                                withAnimation(.easeInOut(duration: 0.18)) {
+                                    if expandedIDs.contains(item.id) {
+                                        expandedIDs.remove(item.id)
+                                    } else {
+                                        expandedIDs.insert(item.id)
+                                    }
+                                }
+                            },
+                            onIgnore: onIgnore
+                        )
                         if item.id != items.last?.id { Divider() }
                     }
                 }
             }
+        }
+        .onChange(of: items) { newItems in
+            let currentIDs = Set(newItems.map(\.id))
+            expandedIDs = expandedIDs.intersection(currentIDs)
         }
     }
 }
 
 private struct ProcessRow: View {
     let item: AnalyzedProcessAssertion
+    let isExpanded: Bool
+    let onToggle: () -> Void
     let onIgnore: (AnalyzedProcessAssertion) -> Void
-    @State private var isExpanded = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -339,9 +368,7 @@ private struct ProcessRow: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                     RiskBadge(level: item.analysis.risk)
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
-                    } label: {
+                    Button(action: onToggle) {
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                             .font(.caption)
                     }
@@ -388,6 +415,7 @@ private struct ProcessRow: View {
 private struct KernelAssertionsView: View {
     let items: [AnalyzedKernelAssertion]
     let onIgnore: (AnalyzedKernelAssertion) -> Void
+    @State private var expandedIDs: Set<String> = []
 
     var body: some View {
         InfoCard(title: L("USB 与内核断言", "USB & Kernel Assertions"), systemImage: "cable.connector") {
@@ -396,19 +424,37 @@ private struct KernelAssertionsView: View {
             } else {
                 VStack(spacing: 8) {
                     ForEach(items) { item in
-                        KernelRow(item: item, onIgnore: onIgnore)
+                        KernelRow(
+                            item: item,
+                            isExpanded: expandedIDs.contains(item.id),
+                            onToggle: {
+                                withAnimation(.easeInOut(duration: 0.18)) {
+                                    if expandedIDs.contains(item.id) {
+                                        expandedIDs.remove(item.id)
+                                    } else {
+                                        expandedIDs.insert(item.id)
+                                    }
+                                }
+                            },
+                            onIgnore: onIgnore
+                        )
                         if item.id != items.last?.id { Divider() }
                     }
                 }
             }
+        }
+        .onChange(of: items) { newItems in
+            let currentIDs = Set(newItems.map(\.id))
+            expandedIDs = expandedIDs.intersection(currentIDs)
         }
     }
 }
 
 private struct KernelRow: View {
     let item: AnalyzedKernelAssertion
+    let isExpanded: Bool
+    let onToggle: () -> Void
     let onIgnore: (AnalyzedKernelAssertion) -> Void
-    @State private var isExpanded = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -424,9 +470,7 @@ private struct KernelRow: View {
                         .lineLimit(1)
                     Spacer()
                     RiskBadge(level: item.analysis.risk)
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
-                    } label: {
+                    Button(action: onToggle) {
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                             .font(.caption)
                     }
@@ -569,45 +613,62 @@ private struct HistoryView: View {
     let records: [HistoryRecord]
 
     var body: some View {
-        List(records) { record in
-            HStack(spacing: 0) {
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(record.status.color)
-                    .frame(width: 3)
-                    .padding(.trailing, 10)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(record.status.title)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(record.status.color)
-                        Spacer()
-                        Text(record.timestamp.formatted(date: .abbreviated, time: .standard))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(L(
-                        "严重 \(record.criticalCount) · 注意 \(record.warningCount) · USB \(record.kernelAssertionCount)",
-                        "Critical \(record.criticalCount) · Warning \(record.warningCount) · USB \(record.kernelAssertionCount)"
-                    ))
-                    .font(.caption)
+        if records.isEmpty {
+            VStack(spacing: 12) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.largeTitle)
                     .foregroundStyle(.secondary)
-                    if let assertionSnapshots = record.assertionSnapshots, assertionSnapshots.isEmpty == false {
+                Text(L("暂无历史记录", "No history yet"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text(L("每次检测结果将自动记录在此。", "Each scan result will be recorded here automatically."))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            List(records) { record in
+                HStack(spacing: 0) {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(record.status.color)
+                        .frame(width: 3)
+                        .padding(.trailing, 10)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(record.status.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(record.status.color)
+                            Spacer()
+                            Text(record.timestamp.formatted(date: .abbreviated, time: .standard))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                         Text(L(
-                            "记录 \(assertionSnapshots.count) 个阻止项快照",
-                            "\(assertionSnapshots.count) assertion snapshot(s) recorded"
+                            "严重 \(record.criticalCount) · 注意 \(record.warningCount) · USB \(record.kernelAssertionCount)",
+                            "Critical \(record.criticalCount) · Warning \(record.warningCount) · USB \(record.kernelAssertionCount)"
                         ))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        if let assertionSnapshots = record.assertionSnapshots, assertionSnapshots.isEmpty == false {
+                            Text(L(
+                                "记录 \(assertionSnapshots.count) 个阻止项快照",
+                                "\(assertionSnapshots.count) assertion snapshot(s) recorded"
+                            ))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
+                        Text(record.status.summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    Text(record.status.summary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
+                .padding(.vertical, 3)
             }
-            .padding(.vertical, 3)
+            .listStyle(.inset)
         }
-        .listStyle(.inset)
     }
 }
 
@@ -617,7 +678,7 @@ private struct SleepLogView: View {
     @ObservedObject var viewModel: SleepGuardViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
                 if viewModel.isSleepLogRefreshing {
                     BreathingLabel(L("正在读取睡眠日志", "Reading sleep log"), systemImage: "hourglass", isAnimating: true)
@@ -643,59 +704,49 @@ private struct SleepLogView: View {
                 .help(L("刷新日志", "Refresh Log"))
                 .disabled(viewModel.isSleepLogRefreshing)
             }
-            .padding([.top, .horizontal], 12)
+            .padding(.horizontal, 14)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
 
-            if let error = viewModel.sleepLogError {
-                InfoCard(title: L("睡眠日志读取失败", "Failed to Read Sleep Log"), systemImage: "exclamationmark.triangle") {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                    Text(L(
-                        "可以稍后重试；当前状态检测不依赖睡眠日志。",
-                        "You can retry later. Status detection does not depend on the sleep log."
-                    ))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 16)
-            } else if let sleepLog = viewModel.sleepLog {
-                VStack(spacing: 10) {
-                    SleepQualitySummaryCard(summary: sleepLog)
-                        .padding(.horizontal, 12)
+            Divider()
 
-                    List(sleepLog.events.reversed()) { event in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(event.type.displayName)
-                                .font(.subheadline.weight(.semibold))
-                            if let timestamp = event.timestamp {
-                                Text(timestamp.formatted(date: .abbreviated, time: .standard))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Text(event.detail)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let error = viewModel.sleepLogError {
+                        InfoCard(title: L("睡眠日志读取失败", "Failed to Read Sleep Log"), systemImage: "exclamationmark.triangle") {
+                            Text(error)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.red)
+                            Text(L(
+                                "可以稍后重试；当前状态检测不依赖睡眠日志。",
+                                "You can retry later. Status detection does not depend on the sleep log."
+                            ))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         }
-                        .padding(.vertical, 4)
+                    } else if let sleepLog = viewModel.sleepLog {
+                        SleepQualitySummaryCard(summary: sleepLog)
+                        SleepEventsCard(events: Array(sleepLog.events.reversed()))
+                    } else if viewModel.isSleepLogRefreshing {
+                        ProgressView(L("正在读取睡眠日志...", "Reading sleep log..."))
+                            .frame(maxWidth: .infinity, minHeight: 200)
+                    } else {
+                        VStack(spacing: 10) {
+                            Image(systemName: "bed.double")
+                                .font(.largeTitle)
+                                .foregroundStyle(.secondary)
+                            Text(L(
+                                "点击\"刷新日志\"读取最近 100 条睡眠/唤醒记录。",
+                                "Click \"Refresh Log\" to load the last 100 sleep/wake events."
+                            ))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 200)
                     }
-                    .listStyle(.inset)
                 }
-            } else if viewModel.isSleepLogRefreshing {
-                ProgressView(L("正在读取睡眠日志...", "Reading sleep log..."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                VStack(spacing: 10) {
-                    Image(systemName: "bed.double")
-                        .font(.largeTitle)
-                        .foregroundStyle(.secondary)
-                    Text(L(
-                        "点击\"刷新日志\"读取最近 100 条睡眠/唤醒记录。",
-                        "Click \"Refresh Log\" to load the last 100 sleep/wake events."
-                    ))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(12)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: viewModel.isSleepLogRefreshing)
@@ -747,6 +798,48 @@ private struct SleepQualitySummaryCard: View {
             return L("未发现明显外设/蓝牙/网络迹象", "No suspicious device/bluetooth/network activity")
         }
         return summary.suspiciousWakeReasons.map(\.explanation).joined(separator: L("、", ", "))
+    }
+}
+
+private struct SleepEventsCard: View {
+    let events: [SleepLogEvent]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(L("睡眠 / 唤醒事件", "Sleep / Wake Events"), systemImage: "list.bullet.clock")
+                .font(.subheadline.weight(.semibold))
+
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(events) { event in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(event.type.displayName)
+                            .font(.subheadline.weight(.semibold))
+                        if let timestamp = event.timestamp {
+                            Text(timestamp.formatted(date: .abbreviated, time: .standard))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(event.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if event.id != events.last?.id {
+                        Divider()
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
