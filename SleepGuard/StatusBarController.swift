@@ -25,7 +25,10 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
     private func configureStatusItem() {
         guard let button = statusItem.button else { return }
-        button.image = NSImage(systemSymbolName: viewModel.menuBarSystemImage, accessibilityDescription: "SleepGuard")
+        button.image = NSImage(
+            systemSymbolName: viewModel.menuBarSystemImage,
+            accessibilityDescription: viewModel.menuBarAccessibilityDescription
+        )
         button.imagePosition = .imageOnly
         button.target = self
         button.action = #selector(statusItemClicked(_:))
@@ -53,7 +56,10 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     }
 
     private func updateStatusImage() {
-        statusItem.button?.image = NSImage(systemSymbolName: viewModel.menuBarSystemImage, accessibilityDescription: "SleepGuard")
+        statusItem.button?.image = NSImage(
+            systemSymbolName: viewModel.menuBarSystemImage,
+            accessibilityDescription: viewModel.menuBarAccessibilityDescription
+        )
     }
 
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
@@ -96,11 +102,9 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         }
 
         menu.addItem(.separator())
-        menu.addItem(modeMenuItem(mode: .display))
-        menu.addItem(modeMenuItem(mode: .system))
-        menu.addItem(modeMenuItem(mode: .displayAndSystem))
+        menu.addItem(sleepPreventionMenuItem())
 
-        let stopItem = NSMenuItem(title: L("停止防休眠", "Stop Sleep Prevention"), action: #selector(stopSleepPrevention), keyEquivalent: "")
+        let stopItem = NSMenuItem(title: L("停止防止睡眠", "Stop Preventing Sleep"), action: #selector(stopSleepPrevention), keyEquivalent: "")
         stopItem.target = self
         stopItem.isEnabled = viewModel.sleepPreventionState.isActive
         menu.addItem(stopItem)
@@ -127,13 +131,13 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         statusItem.popUpMenu(menu)
     }
 
-    private func modeMenuItem(mode: SleepPreventionMode) -> NSMenuItem {
-        let item = NSMenuItem(title: mode.title, action: nil, keyEquivalent: "")
+    private func sleepPreventionMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: L("防止睡眠", "Prevent Sleep"), action: nil, keyEquivalent: "")
         let submenu = NSMenu()
         for duration in SleepPreventionDuration.allCases {
             let durationItem = NSMenuItem(title: duration.title, action: #selector(startSleepPrevention(_:)), keyEquivalent: "")
             durationItem.target = self
-            durationItem.representedObject = SleepPreventionMenuSelection(mode: mode, duration: duration)
+            durationItem.representedObject = duration
             submenu.addItem(durationItem)
         }
         item.submenu = submenu
@@ -141,8 +145,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     }
 
     @objc private func startSleepPrevention(_ sender: NSMenuItem) {
-        guard let selection = sender.representedObject as? SleepPreventionMenuSelection else { return }
-        viewModel.startSleepPrevention(mode: selection.mode, duration: selection.duration)
+        guard let duration = sender.representedObject as? SleepPreventionDuration else { return }
+        viewModel.startSleepPrevention(duration: duration)
     }
 
     @objc private func stopSleepPrevention() {
@@ -164,15 +168,5 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     @objc private func quit() {
         viewModel.stopSleepPrevention()
         NSApplication.shared.terminate(nil)
-    }
-}
-
-private final class SleepPreventionMenuSelection {
-    let mode: SleepPreventionMode
-    let duration: SleepPreventionDuration
-
-    init(mode: SleepPreventionMode, duration: SleepPreventionDuration) {
-        self.mode = mode
-        self.duration = duration
     }
 }

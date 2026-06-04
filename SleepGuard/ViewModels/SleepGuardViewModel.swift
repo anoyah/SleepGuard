@@ -86,11 +86,19 @@ final class SleepGuardViewModel: ObservableObject {
     }
 
     var menuBarSystemImage: String {
+        if sleepPreventionState.isActive {
+            return "cup.and.saucer.fill"
+        }
+
         switch diagnosis?.overallStatus ?? .normal {
         case .normal: return "moon.zzz.fill"
         case .warning: return "moon.zzz"
         case .critical: return "exclamationmark.triangle.fill"
         }
+    }
+
+    var menuBarAccessibilityDescription: String {
+        sleepPreventionState.isActive ? sleepPreventionStatusText : "SleepGuard"
     }
 
     var isLaunchAtLoginEnabled: Bool {
@@ -206,12 +214,14 @@ final class SleepGuardViewModel: ObservableObject {
         }
     }
 
-    func startSleepPrevention(mode: SleepPreventionMode, duration: SleepPreventionDuration) {
-        sleepPreventionManager.start(mode: mode, duration: duration, now: Date())
+    func startSleepPrevention(duration: SleepPreventionDuration) {
+        sleepPreventionManager.start(duration: duration, now: Date())
+        sleepPreventionState = sleepPreventionManager.state
     }
 
     func stopSleepPrevention() {
         sleepPreventionManager.stop()
+        sleepPreventionState = sleepPreventionManager.state
     }
 
     func restartAutoRefresh() {

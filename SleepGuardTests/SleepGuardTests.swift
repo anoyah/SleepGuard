@@ -311,61 +311,43 @@ final class SleepGuardTests: XCTestCase {
         XCTAssertEqual(rule.localizedDetail, "防止系统空闲睡眠 · com.apple.audio.context.preventuseridlesleep")
     }
 
-    func testSleepPreventionManagerCreatesDisplayAssertion() {
-        let powerManager = MockPowerAssertionManager()
-        let manager = SleepPreventionManager(assertionManager: powerManager)
-
-        manager.start(mode: .display, duration: .indefinite, now: Date(timeIntervalSince1970: 0))
-
-        XCTAssertEqual(powerManager.createdTypes, [String(kIOPMAssertionTypeNoDisplaySleep)])
-        XCTAssertTrue(powerManager.releasedIDs.isEmpty)
-        XCTAssertEqual(manager.state.mode, .display)
-    }
-
-    func testSleepPreventionManagerCreatesSystemAssertion() {
-        let powerManager = MockPowerAssertionManager()
-        let manager = SleepPreventionManager(assertionManager: powerManager)
-
-        manager.start(mode: .system, duration: .indefinite, now: Date(timeIntervalSince1970: 0))
-
-        XCTAssertEqual(powerManager.createdTypes, [String(kIOPMAssertionTypeNoIdleSleep)])
-        XCTAssertEqual(manager.state.mode, .system)
-    }
-
     func testSleepPreventionManagerCreatesDisplayAndSystemAssertions() {
         let powerManager = MockPowerAssertionManager()
         let manager = SleepPreventionManager(assertionManager: powerManager)
 
-        manager.start(mode: .displayAndSystem, duration: .indefinite, now: Date(timeIntervalSince1970: 0))
+        manager.start(duration: .indefinite, now: Date(timeIntervalSince1970: 0))
 
         XCTAssertEqual(powerManager.createdTypes, [
             String(kIOPMAssertionTypeNoDisplaySleep),
             String(kIOPMAssertionTypeNoIdleSleep)
         ])
-        XCTAssertEqual(manager.state.mode, .displayAndSystem)
+        XCTAssertTrue(powerManager.releasedIDs.isEmpty)
+        XCTAssertTrue(manager.state.isActive)
+        XCTAssertEqual(manager.state.duration, .indefinite)
     }
 
-    func testSleepPreventionManagerReleasesOldAssertionsWhenStartingNewMode() {
+    func testSleepPreventionManagerReleasesOldAssertionsWhenSwitchingDuration() {
         let powerManager = MockPowerAssertionManager()
         let manager = SleepPreventionManager(assertionManager: powerManager)
 
-        manager.start(mode: .displayAndSystem, duration: .indefinite, now: Date(timeIntervalSince1970: 0))
-        manager.start(mode: .system, duration: .indefinite, now: Date(timeIntervalSince1970: 10))
+        manager.start(duration: .indefinite, now: Date(timeIntervalSince1970: 0))
+        manager.start(duration: .oneHour, now: Date(timeIntervalSince1970: 10))
 
         XCTAssertEqual(powerManager.releasedIDs, [1, 2])
         XCTAssertEqual(powerManager.createdTypes, [
             String(kIOPMAssertionTypeNoDisplaySleep),
             String(kIOPMAssertionTypeNoIdleSleep),
+            String(kIOPMAssertionTypeNoDisplaySleep),
             String(kIOPMAssertionTypeNoIdleSleep)
         ])
-        XCTAssertEqual(manager.state.mode, .system)
+        XCTAssertEqual(manager.state.duration, .oneHour)
     }
 
     func testSleepPreventionManagerStopsAndClearsState() {
         let powerManager = MockPowerAssertionManager()
         let manager = SleepPreventionManager(assertionManager: powerManager)
 
-        manager.start(mode: .displayAndSystem, duration: .indefinite, now: Date(timeIntervalSince1970: 0))
+        manager.start(duration: .indefinite, now: Date(timeIntervalSince1970: 0))
         manager.stop()
 
         XCTAssertEqual(powerManager.releasedIDs, [1, 2])
@@ -376,10 +358,10 @@ final class SleepGuardTests: XCTestCase {
         let powerManager = MockPowerAssertionManager()
         let manager = SleepPreventionManager(assertionManager: powerManager)
 
-        manager.start(mode: .display, duration: .fifteenMinutes, now: Date(timeIntervalSince1970: 0))
+        manager.start(duration: .fifteenMinutes, now: Date(timeIntervalSince1970: 0))
         manager.expireCurrentSessionForTesting()
 
-        XCTAssertEqual(powerManager.releasedIDs, [1])
+        XCTAssertEqual(powerManager.releasedIDs, [1, 2])
         XCTAssertEqual(manager.state, .inactive)
     }
 
@@ -387,14 +369,34 @@ final class SleepGuardTests: XCTestCase {
         SleepGuardLocalization.preferredLanguageOverride = nil
         SleepGuardLocalization.appLanguage = .zhHans
         let state = SleepPreventionState(
-            mode: .displayAndSystem,
+            isActive: true,
             duration: .oneHour,
             startedAt: Date(timeIntervalSince1970: 0),
             endsAt: Date(timeIntervalSince1970: 3600)
         )
 
-        XCTAssertEqual(state.statusTitle, "正在防止屏幕和系统休眠")
+        XCTAssertEqual(state.statusTitle, "正在防止睡眠")
         XCTAssertEqual(state.detailText(now: Date(timeIntervalSince1970: 0)), "剩余 1 小时")
+    }
+
+    @MainActor
+    func testMenuBarIconUsesSleepPreventionIconWhenActive() {
+        let preventionManager = MockSleepPreventionManager()
+        let viewModel = SleepGuardViewModel(
+            historyStore: LocalHistoryStore(fileURL: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)),
+            sleepPreventionManager: preventionManager
+        )
+
+        XCTAssertEqual(viewModel.menuBarSystemImage, "moon.zzz.fill")
+        XCTAssertEqual(viewModel.menuBarAccessibilityDescription, "SleepGuard")
+
+        viewModel.startSleepPrevention(duration: .indefinite)
+        XCTAssertEqual(viewModel.menuBarSystemImage, "cup.and.saucer.fill")
+        XCTAssertEqual(viewModel.menuBarAccessibilityDescription, "正在防止睡眠")
+
+        viewModel.stopSleepPrevention()
+        XCTAssertEqual(viewModel.menuBarSystemImage, "moon.zzz.fill")
+        XCTAssertEqual(viewModel.menuBarAccessibilityDescription, "SleepGuard")
     }
 
     @MainActor
@@ -597,5 +599,23 @@ private final class MockPowerAssertionManager: PowerAssertionManaging {
 
     func release(_ id: IOPMAssertionID) {
         releasedIDs.append(id)
+    }
+}
+
+private final class MockSleepPreventionManager: SleepPreventionManaging {
+    private(set) var state: SleepPreventionState = .inactive {
+        didSet {
+            onStateChange?(state)
+        }
+    }
+
+    var onStateChange: ((SleepPreventionState) -> Void)?
+
+    func start(duration: SleepPreventionDuration, now: Date) {
+        state = SleepPreventionState(isActive: true, duration: duration, startedAt: now, endsAt: duration.seconds.map { now.addingTimeInterval($0) })
+    }
+
+    func stop() {
+        state = .inactive
     }
 }

@@ -117,7 +117,7 @@ private struct HeaderView: View {
                     Image(systemName: "cup.and.saucer")
                 }
                 .buttonStyle(.borderless)
-                .help(L("停止防休眠", "Stop Sleep Prevention"))
+                .help(L("停止防止睡眠", "Stop Preventing Sleep"))
                 .foregroundStyle(.orange)
             }
 

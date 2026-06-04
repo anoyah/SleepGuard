@@ -5,7 +5,7 @@ protocol SleepPreventionManaging: AnyObject {
     var state: SleepPreventionState { get }
     var onStateChange: ((SleepPreventionState) -> Void)? { get set }
 
-    func start(mode: SleepPreventionMode, duration: SleepPreventionDuration, now: Date)
+    func start(duration: SleepPreventionDuration, now: Date)
     func stop()
 }
 
@@ -57,10 +57,10 @@ final class SleepPreventionManager: SleepPreventionManaging {
         stop()
     }
 
-    func start(mode: SleepPreventionMode, duration: SleepPreventionDuration, now: Date = Date()) {
+    func start(duration: SleepPreventionDuration, now: Date = Date()) {
         stop()
 
-        let assertions = assertionTypes(for: mode).compactMap { type -> HeldAssertion? in
+        let assertions = assertionTypes().compactMap { type -> HeldAssertion? in
             guard let id = assertionManager.create(type: type, name: assertionName(for: type)) else { return nil }
             return HeldAssertion(id: id, type: type)
         }
@@ -72,7 +72,7 @@ final class SleepPreventionManager: SleepPreventionManaging {
 
         heldAssertions = assertions
         let endsAt = duration.seconds.map { now.addingTimeInterval($0) }
-        state = SleepPreventionState(mode: mode, duration: duration, startedAt: now, endsAt: endsAt)
+        state = SleepPreventionState(isActive: true, duration: duration, startedAt: now, endsAt: endsAt)
 
         if let seconds = duration.seconds {
             expirationTask = Task { [weak self] in
@@ -97,15 +97,8 @@ final class SleepPreventionManager: SleepPreventionManaging {
         stop()
     }
 
-    private func assertionTypes(for mode: SleepPreventionMode) -> [String] {
-        switch mode {
-        case .display:
-            return [kIOPMAssertionTypeNoDisplaySleep]
-        case .system:
-            return [kIOPMAssertionTypeNoIdleSleep]
-        case .displayAndSystem:
-            return [kIOPMAssertionTypeNoDisplaySleep, kIOPMAssertionTypeNoIdleSleep]
-        }
+    private func assertionTypes() -> [String] {
+        [kIOPMAssertionTypeNoDisplaySleep, kIOPMAssertionTypeNoIdleSleep]
     }
 
     private func assertionName(for type: String) -> String {

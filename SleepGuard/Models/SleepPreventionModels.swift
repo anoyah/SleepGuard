@@ -1,35 +1,5 @@
 import Foundation
 
-enum SleepPreventionMode: String, CaseIterable, Identifiable, Equatable {
-    case display
-    case system
-    case displayAndSystem
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .display:
-            return L("防止屏幕休眠", "Prevent Display Sleep")
-        case .system:
-            return L("防止系统休眠", "Prevent System Sleep")
-        case .displayAndSystem:
-            return L("防止两者休眠", "Prevent Both")
-        }
-    }
-
-    var statusTitle: String {
-        switch self {
-        case .display:
-            return L("正在防止屏幕休眠", "Preventing display sleep")
-        case .system:
-            return L("正在防止系统休眠", "Preventing system sleep")
-        case .displayAndSystem:
-            return L("正在防止屏幕和系统休眠", "Preventing display and system sleep")
-        }
-    }
-}
-
 enum SleepPreventionDuration: String, CaseIterable, Identifiable, Equatable {
     case fifteenMinutes
     case thirtyMinutes
@@ -66,22 +36,18 @@ enum SleepPreventionDuration: String, CaseIterable, Identifiable, Equatable {
 }
 
 struct SleepPreventionState: Equatable {
-    var mode: SleepPreventionMode?
+    var isActive: Bool
     var duration: SleepPreventionDuration?
     var startedAt: Date?
     var endsAt: Date?
 
-    static let inactive = SleepPreventionState(mode: nil, duration: nil, startedAt: nil, endsAt: nil)
-
-    var isActive: Bool {
-        mode != nil
-    }
+    static let inactive = SleepPreventionState(isActive: false, duration: nil, startedAt: nil, endsAt: nil)
 
     var statusTitle: String {
-        guard let mode else {
-            return L("未开启防休眠", "Sleep prevention is off")
+        guard isActive else {
+            return L("未开启防止睡眠", "Sleep prevention is off")
         }
-        return mode.statusTitle
+        return L("正在防止睡眠", "Preventing sleep")
     }
 
     func detailText(now: Date = Date()) -> String {
