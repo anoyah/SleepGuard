@@ -3,26 +3,36 @@ import SwiftUI
 
 struct SleepGuardRootView: View {
     @ObservedObject var viewModel: SleepGuardViewModel
+    @State private var selectedTab = 0
+    @State private var scrollToTopToken = 0
 
     var body: some View {
         VStack(spacing: 0) {
             HeaderView(viewModel: viewModel)
-            TabView {
-                CurrentStatusView(viewModel: viewModel)
+            TabView(selection: $selectedTab) {
+                CurrentStatusView(viewModel: viewModel, scrollToTopToken: scrollToTopToken)
                     .tabItem { Label(L("当前状态", "Status"), systemImage: "gauge.with.dots.needle.67percent") }
+                    .tag(0)
 
                 HistoryView(records: viewModel.history)
                     .tabItem { Label(L("历史记录", "History"), systemImage: "clock.arrow.circlepath") }
+                    .tag(1)
 
                 SleepLogView(viewModel: viewModel)
                     .tabItem { Label(L("睡眠日志", "Sleep Log"), systemImage: "bed.double") }
+                    .tag(2)
 
                 SettingsView(viewModel: viewModel)
                     .tabItem { Label(L("设置", "Settings"), systemImage: "gearshape") }
+                    .tag(3)
             }
             .padding(.top, 4)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+        .onAppear {
+            selectedTab = 0
+            scrollToTopToken += 1
+        }
     }
 }
 
@@ -87,10 +97,13 @@ private struct HeaderView: View {
 
 private struct CurrentStatusView: View {
     @ObservedObject var viewModel: SleepGuardViewModel
+    let scrollToTopToken: Int
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
+                Color.clear.frame(height: 0).id("top")
                 if let error = viewModel.lastError {
                     InfoCard(title: L("错误", "Error"), systemImage: "exclamationmark.triangle") {
                         Text(error).foregroundStyle(.red)
@@ -129,6 +142,10 @@ private struct CurrentStatusView: View {
             .animation(.easeInOut(duration: 0.24), value: viewModel.diagnosis != nil)
             .animation(.easeInOut(duration: 0.18), value: viewModel.lastError)
         }
+        .onChange(of: scrollToTopToken) { _ in
+            proxy.scrollTo("top", anchor: .top)
+        }
+        } // ScrollViewReader
     }
 }
 
@@ -725,9 +742,6 @@ private struct SettingsView: View {
                 ForEach(RefreshInterval.allCases) { interval in
                     Text(interval.title).tag(interval)
                 }
-            }
-            .onChange(of: viewModel.settings.refreshInterval) { _ in
-                viewModel.restartAutoRefresh()
             }
 
             Section(L("已忽略规则", "Ignored Rules")) {

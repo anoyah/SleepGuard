@@ -26,6 +26,8 @@ final class SleepGuardViewModel: ObservableObject {
     private let historyStore: LocalHistoryStore
     private let launchAtLoginManager: LaunchAtLoginManaging
     private var autoRefreshTask: Task<Void, Never>?
+    private var isMenuOpen = false
+    private var cancellables = Set<AnyCancellable>()
 
     init(
         runner: PMSetRunning = PMSetCommandRunner(),
@@ -48,6 +50,16 @@ final class SleepGuardViewModel: ObservableObject {
         self.historyStore = historyStore
         self.launchAtLoginManager = launchAtLoginManager
         self.history = Array(historyStore.load().reversed())
+
+        settings.$refreshInterval
+            .dropFirst()
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, self.isMenuOpen else { return }
+                    self.restartAutoRefresh()
+                }
+            }
+            .store(in: &cancellables)
     }
 
     var menuBarSystemImage: String {
@@ -63,6 +75,7 @@ final class SleepGuardViewModel: ObservableObject {
     }
 
     func start() async {
+        isMenuOpen = true
         if diagnosis == nil {
             await refreshAll()
         }
@@ -181,6 +194,7 @@ final class SleepGuardViewModel: ObservableObject {
     }
 
     func stopAutoRefresh() {
+        isMenuOpen = false
         autoRefreshTask?.cancel()
         autoRefreshTask = nil
     }
