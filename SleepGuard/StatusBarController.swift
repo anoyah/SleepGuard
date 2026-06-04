@@ -8,6 +8,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
     private var cancellables = Set<AnyCancellable>()
+    private var localMouseMonitor: Any?
+    private var globalMouseMonitor: Any?
 
     init(viewModel: SleepGuardViewModel) {
         self.viewModel = viewModel
@@ -20,6 +22,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     }
 
     func popoverDidClose(_ notification: Notification) {
+        removeMouseMonitors()
         viewModel.stopAutoRefresh()
     }
 
@@ -84,7 +87,61 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         guard let button = statusItem.button else { return }
         Task { await viewModel.start() }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        installMouseMonitors()
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func installMouseMonitors() {
+        removeMouseMonitors()
+
+        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            guard let self else { return event }
+            if self.shouldClosePopover(forScreenPoint: NSEvent.mouseLocation) {
+                self.popover.performClose(nil)
+            }
+            return event
+        }
+
+        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            guard let self else { return }
+            if self.shouldClosePopover(forScreenPoint: NSEvent.mouseLocation) {
+                self.popover.performClose(nil)
+            }
+        }
+    }
+
+    private func removeMouseMonitors() {
+        if let localMouseMonitor {
+            NSEvent.removeMonitor(localMouseMonitor)
+            self.localMouseMonitor = nil
+        }
+
+        if let globalMouseMonitor {
+            NSEvent.removeMonitor(globalMouseMonitor)
+            self.globalMouseMonitor = nil
+        }
+    }
+
+    private func shouldClosePopover(forScreenPoint screenPoint: NSPoint) -> Bool {
+        guard popover.isShown else { return false }
+
+        let statusButtonWindow = statusItem.button?.window
+        if NSApp.windows.contains(where: { window in
+            window.isVisible && window !== statusButtonWindow && window.frame.contains(screenPoint)
+        }) {
+            return false
+        }
+
+        if let statusButton = statusItem.button,
+           let statusButtonWindow {
+            let buttonRectInWindow = statusButton.convert(statusButton.bounds, to: nil)
+            let buttonRectOnScreen = statusButtonWindow.convertToScreen(buttonRectInWindow)
+            if buttonRectOnScreen.contains(screenPoint) {
+                return false
+            }
+        }
+
+        return true
     }
 
     private func showContextMenu() {

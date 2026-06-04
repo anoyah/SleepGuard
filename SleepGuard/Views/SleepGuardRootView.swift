@@ -329,7 +329,7 @@ private struct FlagRow: View {
 private struct ProcessAssertionsView: View {
     let items: [AnalyzedProcessAssertion]
     let onIgnore: (AnalyzedProcessAssertion) -> Void
-    @State private var expandedIDs: Set<String> = []
+    @State private var expandedID: String?
 
     var body: some View {
         InfoCard(title: L("阻止休眠的进程", "Sleep-Blocking Processes"), systemImage: "app.badge") {
@@ -340,13 +340,13 @@ private struct ProcessAssertionsView: View {
                     ForEach(items) { item in
                         ProcessRow(
                             item: item,
-                            isExpanded: expandedIDs.contains(item.id),
+                            isExpanded: expandedID == item.id,
                             onToggle: {
                                 withAnimation(.easeInOut(duration: 0.18)) {
-                                    if expandedIDs.contains(item.id) {
-                                        expandedIDs.remove(item.id)
+                                    if expandedID == item.id {
+                                        expandedID = nil
                                     } else {
-                                        expandedIDs.insert(item.id)
+                                        expandedID = item.id
                                     }
                                 }
                             },
@@ -359,7 +359,9 @@ private struct ProcessAssertionsView: View {
         }
         .onChange(of: items) { newItems in
             let currentIDs = Set(newItems.map(\.id))
-            expandedIDs = expandedIDs.intersection(currentIDs)
+            if let expandedID, currentIDs.contains(expandedID) == false {
+                self.expandedID = nil
+            }
         }
     }
 }
@@ -434,7 +436,7 @@ private struct ProcessRow: View {
 private struct KernelAssertionsView: View {
     let items: [AnalyzedKernelAssertion]
     let onIgnore: (AnalyzedKernelAssertion) -> Void
-    @State private var expandedIDs: Set<String> = []
+    @State private var expandedID: String?
 
     var body: some View {
         InfoCard(title: L("USB 与内核断言", "USB & Kernel Assertions"), systemImage: "cable.connector") {
@@ -445,13 +447,13 @@ private struct KernelAssertionsView: View {
                     ForEach(items) { item in
                         KernelRow(
                             item: item,
-                            isExpanded: expandedIDs.contains(item.id),
+                            isExpanded: expandedID == item.id,
                             onToggle: {
                                 withAnimation(.easeInOut(duration: 0.18)) {
-                                    if expandedIDs.contains(item.id) {
-                                        expandedIDs.remove(item.id)
+                                    if expandedID == item.id {
+                                        expandedID = nil
                                     } else {
-                                        expandedIDs.insert(item.id)
+                                        expandedID = item.id
                                     }
                                 }
                             },
@@ -464,7 +466,9 @@ private struct KernelAssertionsView: View {
         }
         .onChange(of: items) { newItems in
             let currentIDs = Set(newItems.map(\.id))
-            expandedIDs = expandedIDs.intersection(currentIDs)
+            if let expandedID, currentIDs.contains(expandedID) == false {
+                self.expandedID = nil
+            }
         }
     }
 }
