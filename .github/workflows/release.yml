@@ -1,0 +1,38 @@
+name: Build Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build app
+        run: |
+          xcodebuild \
+            -project SleepGuard.xcodeproj \
+            -scheme SleepGuard \
+            -configuration Release \
+            -derivedDataPath .derivedData \
+            build
+
+      - name: Package app
+        run: |
+          mkdir -p dist
+          APP=".derivedData/Build/Products/Release/SleepGuard.app"
+          ditto -c -k --keepParent "$APP" "dist/SleepGuard.app.zip"
+          hdiutil create -volname "SleepGuard" -srcfolder "$APP" -ov -format UDZO "dist/SleepGuard.dmg"
+          pkgbuild --install-location /Applications --component "$APP" "dist/SleepGuard.pkg"
+          shasum -a 256 dist/* > dist/checksums.txt
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
