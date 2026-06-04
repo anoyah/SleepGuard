@@ -21,6 +21,7 @@ SleepGuard is a macOS menu bar app for diagnosing why your Mac will not sleep au
 - Ignore rules: hide known-safe process or device assertions so they no longer affect the overall status.
 - Diagnostic report: copy a text report with status, raw assertions, trends, and recommendations.
 - Auto refresh and launch at login: configure refresh intervals and optionally start SleepGuard when you log in.
+- Right-click sleep prevention: right-click the menu bar icon to temporarily prevent display sleep, system sleep, or both.
 
 ## Requirements
 
@@ -35,7 +36,7 @@ SleepGuard is a macOS menu bar app for diagnosing why your Mac will not sleep au
 3. Build and run the app.
 4. Click the SleepGuard icon in the menu bar to view the diagnosis.
 
-SleepGuard does not terminate processes or change system power settings. All diagnostics are based on local command output and local history.
+SleepGuard does not terminate processes or permanently change system power settings. Sleep prevention only holds temporary system assertions while enabled. All diagnostics are based on local command output and local history.
 
 ## Build From Command Line
 
@@ -58,7 +59,8 @@ SleepGuard runs locally and does not upload data.
 - Sleep assertions come from `/usr/bin/pmset -g assertions`.
 - Sleep logs come from filtered local output of `/usr/bin/pmset -g log`.
 - History is stored under the user's Application Support directory: `SleepGuard/history.json`.
-- Refresh interval and ignore rules are stored in `UserDefaults`.
+- Refresh interval, language, and ignore rules are stored in `UserDefaults`.
+- Sleep prevention uses temporary IOKit power assertions that are released when stopped or when the app exits.
 - When you copy a report, the generated text is written to the system clipboard.
 
 ## Risk Classification

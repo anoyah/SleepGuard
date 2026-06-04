@@ -1,3 +1,4 @@
+import IOKit.pwr_mgt
 import XCTest
 @testable import SleepGuard
 
@@ -310,6 +311,92 @@ final class SleepGuardTests: XCTestCase {
         XCTAssertEqual(rule.localizedDetail, "防止系统空闲睡眠 · com.apple.audio.context.preventuseridlesleep")
     }
 
+    func testSleepPreventionManagerCreatesDisplayAssertion() {
+        let powerManager = MockPowerAssertionManager()
+        let manager = SleepPreventionManager(assertionManager: powerManager)
+
+        manager.start(mode: .display, duration: .indefinite, now: Date(timeIntervalSince1970: 0))
+
+        XCTAssertEqual(powerManager.createdTypes, [String(kIOPMAssertionTypeNoDisplaySleep)])
+        XCTAssertTrue(powerManager.releasedIDs.isEmpty)
+        XCTAssertEqual(manager.state.mode, .display)
+    }
+
+    func testSleepPreventionManagerCreatesSystemAssertion() {
+        let powerManager = MockPowerAssertionManager()
+        let manager = SleepPreventionManager(assertionManager: powerManager)
+
+        manager.start(mode: .system, duration: .indefinite, now: Date(timeIntervalSince1970: 0))
+
+        XCTAssertEqual(powerManager.createdTypes, [String(kIOPMAssertionTypeNoIdleSleep)])
+        XCTAssertEqual(manager.state.mode, .system)
+    }
+
+    func testSleepPreventionManagerCreatesDisplayAndSystemAssertions() {
+        let powerManager = MockPowerAssertionManager()
+        let manager = SleepPreventionManager(assertionManager: powerManager)
+
+        manager.start(mode: .displayAndSystem, duration: .indefinite, now: Date(timeIntervalSince1970: 0))
+
+        XCTAssertEqual(powerManager.createdTypes, [
+            String(kIOPMAssertionTypeNoDisplaySleep),
+            String(kIOPMAssertionTypeNoIdleSleep)
+        ])
+        XCTAssertEqual(manager.state.mode, .displayAndSystem)
+    }
+
+    func testSleepPreventionManagerReleasesOldAssertionsWhenStartingNewMode() {
+        let powerManager = MockPowerAssertionManager()
+        let manager = SleepPreventionManager(assertionManager: powerManager)
+
+        manager.start(mode: .displayAndSystem, duration: .indefinite, now: Date(timeIntervalSince1970: 0))
+        manager.start(mode: .system, duration: .indefinite, now: Date(timeIntervalSince1970: 10))
+
+        XCTAssertEqual(powerManager.releasedIDs, [1, 2])
+        XCTAssertEqual(powerManager.createdTypes, [
+            String(kIOPMAssertionTypeNoDisplaySleep),
+            String(kIOPMAssertionTypeNoIdleSleep),
+            String(kIOPMAssertionTypeNoIdleSleep)
+        ])
+        XCTAssertEqual(manager.state.mode, .system)
+    }
+
+    func testSleepPreventionManagerStopsAndClearsState() {
+        let powerManager = MockPowerAssertionManager()
+        let manager = SleepPreventionManager(assertionManager: powerManager)
+
+        manager.start(mode: .displayAndSystem, duration: .indefinite, now: Date(timeIntervalSince1970: 0))
+        manager.stop()
+
+        XCTAssertEqual(powerManager.releasedIDs, [1, 2])
+        XCTAssertEqual(manager.state, .inactive)
+    }
+
+    func testSleepPreventionManagerTimedSessionCanExpire() {
+        let powerManager = MockPowerAssertionManager()
+        let manager = SleepPreventionManager(assertionManager: powerManager)
+
+        manager.start(mode: .display, duration: .fifteenMinutes, now: Date(timeIntervalSince1970: 0))
+        manager.expireCurrentSessionForTesting()
+
+        XCTAssertEqual(powerManager.releasedIDs, [1])
+        XCTAssertEqual(manager.state, .inactive)
+    }
+
+    func testSleepPreventionStateUsesCurrentLanguage() {
+        SleepGuardLocalization.preferredLanguageOverride = nil
+        SleepGuardLocalization.appLanguage = .zhHans
+        let state = SleepPreventionState(
+            mode: .displayAndSystem,
+            duration: .oneHour,
+            startedAt: Date(timeIntervalSince1970: 0),
+            endsAt: Date(timeIntervalSince1970: 3600)
+        )
+
+        XCTAssertEqual(state.statusTitle, "正在防止屏幕和系统休眠")
+        XCTAssertEqual(state.detailText(now: Date(timeIntervalSince1970: 0)), "剩余 1 小时")
+    }
+
     @MainActor
     func testLaunchAtLoginManagerCanBeMockedFromViewModel() {
         let manager = MockLaunchAtLoginManager()
@@ -492,5 +579,23 @@ private struct MockPMSetRunner: PMSetRunning {
 
     func log() async throws -> String {
         logOutput
+    }
+}
+
+private final class MockPowerAssertionManager: PowerAssertionManaging {
+    private var nextID: IOPMAssertionID = 1
+    private(set) var createdTypes: [String] = []
+    private(set) var createdNames: [String] = []
+    private(set) var releasedIDs: [IOPMAssertionID] = []
+
+    func create(type: String, name: String) -> IOPMAssertionID? {
+        createdTypes.append(type)
+        createdNames.append(name)
+        defer { nextID += 1 }
+        return nextID
+    }
+
+    func release(_ id: IOPMAssertionID) {
+        releasedIDs.append(id)
     }
 }

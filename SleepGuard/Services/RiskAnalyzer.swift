@@ -4,7 +4,8 @@ struct RiskAnalyzer {
     private let longRunningThreshold = 30 * 60
 
     func analyze(_ parsed: ParsedAssertions) -> SleepDiagnosis {
-        let processItems = parsed.processAssertions.map { assertion in
+        let visibleProcessAssertions = parsed.processAssertions.filter { isSleepGuardPreventionAssertion($0) == false }
+        let processItems = visibleProcessAssertions.map { assertion in
             AnalyzedProcessAssertion(assertion: assertion, analysis: analyzeProcess(assertion), trend: nil)
         }
         let kernelItems = parsed.kernelAssertions.map { assertion in
@@ -42,6 +43,11 @@ struct RiskAnalyzer {
             warningCount: warningCount,
             kernelAssertionCount: kernelAssertionCount
         )
+    }
+
+    private func isSleepGuardPreventionAssertion(_ assertion: ProcessAssertion) -> Bool {
+        assertion.processName.caseInsensitiveCompare("SleepGuard") == .orderedSame
+            && assertion.reason.localizedCaseInsensitiveContains("SleepGuard - Prevent")
     }
 
     func analyzeProcess(_ assertion: ProcessAssertion) -> RiskExplanation {

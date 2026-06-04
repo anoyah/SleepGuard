@@ -15,6 +15,7 @@ final class SleepGuardViewModel: ObservableObject {
     @Published private(set) var launchAtLoginError: String?
     @Published private(set) var lastRefresh: Date?
     @Published private(set) var localizationRevision = 0
+    @Published private(set) var sleepPreventionState: SleepPreventionState = .inactive
     @Published var settings = SettingsStore()
 
     private let runner: PMSetRunning
@@ -26,6 +27,7 @@ final class SleepGuardViewModel: ObservableObject {
     private let reportGenerator: ReportGenerator
     private let historyStore: LocalHistoryStore
     private let launchAtLoginManager: LaunchAtLoginManaging
+    private let sleepPreventionManager: SleepPreventionManaging
     private var autoRefreshTask: Task<Void, Never>?
     private var isMenuOpen = false
     private var cancellables = Set<AnyCancellable>()
@@ -39,7 +41,8 @@ final class SleepGuardViewModel: ObservableObject {
         ignoredMatcher: IgnoredAssertionMatcher = IgnoredAssertionMatcher(),
         reportGenerator: ReportGenerator = ReportGenerator(),
         historyStore: LocalHistoryStore = LocalHistoryStore(),
-        launchAtLoginManager: LaunchAtLoginManaging = LaunchAtLoginManager()
+        launchAtLoginManager: LaunchAtLoginManaging = LaunchAtLoginManager(),
+        sleepPreventionManager: SleepPreventionManaging = SleepPreventionManager()
     ) {
         self.runner = runner
         self.assertionsParser = assertionsParser
@@ -50,7 +53,15 @@ final class SleepGuardViewModel: ObservableObject {
         self.reportGenerator = reportGenerator
         self.historyStore = historyStore
         self.launchAtLoginManager = launchAtLoginManager
+        self.sleepPreventionManager = sleepPreventionManager
         self.history = Array(historyStore.load().reversed())
+        self.sleepPreventionState = sleepPreventionManager.state
+
+        self.sleepPreventionManager.onStateChange = { [weak self] state in
+            Task { @MainActor [weak self] in
+                self?.sleepPreventionState = state
+            }
+        }
 
         SleepGuardLocalization.appLanguage = settings.appLanguage
 
@@ -84,6 +95,14 @@ final class SleepGuardViewModel: ObservableObject {
 
     var isLaunchAtLoginEnabled: Bool {
         launchAtLoginManager.isEnabled
+    }
+
+    var sleepPreventionStatusText: String {
+        sleepPreventionState.statusTitle
+    }
+
+    var sleepPreventionDetailText: String {
+        sleepPreventionState.detailText()
     }
 
     func start() async {
@@ -185,6 +204,14 @@ final class SleepGuardViewModel: ObservableObject {
                                    "Failed to update login item: \(error.localizedDescription)")
             objectWillChange.send()
         }
+    }
+
+    func startSleepPrevention(mode: SleepPreventionMode, duration: SleepPreventionDuration) {
+        sleepPreventionManager.start(mode: mode, duration: duration, now: Date())
+    }
+
+    func stopSleepPrevention() {
+        sleepPreventionManager.stop()
     }
 
     func restartAutoRefresh() {

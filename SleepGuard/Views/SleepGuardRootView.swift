@@ -64,6 +64,13 @@ private struct HeaderView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                if viewModel.sleepPreventionState.isActive {
+                    TimelineView(.periodic(from: Date(), by: 30)) { _ in
+                        Text("\(viewModel.sleepPreventionStatusText) · \(viewModel.sleepPreventionDetailText)")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
             }
 
             Spacer()
@@ -101,6 +108,17 @@ private struct HeaderView: View {
             .popover(isPresented: $showSettings, arrowEdge: .bottom) {
                 SettingsView(viewModel: viewModel)
                     .frame(width: 340)
+            }
+
+            if viewModel.sleepPreventionState.isActive {
+                Button {
+                    viewModel.stopSleepPrevention()
+                } label: {
+                    Image(systemName: "cup.and.saucer")
+                }
+                .buttonStyle(.borderless)
+                .help(L("停止防休眠", "Stop Sleep Prevention"))
+                .foregroundStyle(.orange)
             }
 
             Button {

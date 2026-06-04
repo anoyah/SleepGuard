@@ -9,21 +9,25 @@ import SwiftUI
 
 @main
 struct SleepGuardApp: App {
-    @StateObject private var viewModel = SleepGuardViewModel()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        MenuBarExtra {
-            SleepGuardRootView(viewModel: viewModel)
-                .frame(width: 390, height: 560)
-                .task {
-                    await viewModel.start()
-                }
-                .onDisappear {
-                    viewModel.stopAutoRefresh()
-                }
-        } label: {
-            Image(systemName: viewModel.menuBarSystemImage)
+        Settings {
+            EmptyView()
         }
-        .menuBarExtraStyle(.window)
+    }
+}
+
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let viewModel = SleepGuardViewModel()
+    private var statusBarController: StatusBarController?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        statusBarController = StatusBarController(viewModel: viewModel)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        viewModel.stopSleepPrevention()
     }
 }
