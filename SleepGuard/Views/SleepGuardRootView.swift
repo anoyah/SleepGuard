@@ -120,14 +120,6 @@ private struct HeaderView: View {
                 .help(L("停止防止睡眠", "Stop Preventing Sleep"))
                 .foregroundStyle(.orange)
             }
-
-            Button {
-                NSApplication.shared.terminate(nil)
-            } label: {
-                Image(systemName: "power")
-            }
-            .buttonStyle(.borderless)
-            .help(L("退出 SleepGuard", "Quit SleepGuard"))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -159,12 +151,15 @@ private struct CurrentStatusView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     Color.clear.frame(height: 0).id("top")
+
                     if let error = viewModel.lastError {
                         InfoCard(title: L("错误", "Error"), systemImage: "exclamationmark.triangle") {
                             Text(error).foregroundStyle(.red)
                         }
                         .transition(.opacity)
                     }
+
+                    SleepPreventionCard(viewModel: viewModel)
 
                     if let diagnosis = viewModel.diagnosis {
                         VStack(alignment: .leading, spacing: 10) {
@@ -187,10 +182,10 @@ private struct CurrentStatusView: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                     } else if viewModel.isRefreshing {
                         ProgressView(L("正在读取 pmset 输出...", "Reading pmset output..."))
-                            .frame(maxWidth: .infinity, minHeight: 220)
+                            .frame(maxWidth: .infinity, minHeight: 180)
                     } else {
                         EmptyText(L("暂无检测结果，请点击\"刷新\"重试。", "No results. Click Refresh to retry."))
-                            .frame(maxWidth: .infinity, minHeight: 220)
+                            .frame(maxWidth: .infinity, minHeight: 180)
                     }
                 }
                 .padding(12)
@@ -201,6 +196,56 @@ private struct CurrentStatusView: View {
                 proxy.scrollTo("top", anchor: .top)
             }
         }
+    }
+}
+
+// MARK: - Sleep Prevention Card
+
+private struct SleepPreventionCard: View {
+    @ObservedObject var viewModel: SleepGuardViewModel
+    @State private var selectedDuration: SleepPreventionDuration = .oneHour
+
+    var body: some View {
+        InfoCard(title: L("防止睡眠", "Prevent Sleep"), systemImage: "cup.and.saucer") {
+            if viewModel.sleepPreventionState.isActive {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(viewModel.sleepPreventionStatusText)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.orange)
+                        TimelineView(.periodic(from: Date(), by: 30)) { _ in
+                            Text(viewModel.sleepPreventionDetailText)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    Button(L("停止", "Stop")) {
+                        viewModel.stopSleepPrevention()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.orange)
+                    .controlSize(.small)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    Picker("", selection: $selectedDuration) {
+                        ForEach(SleepPreventionDuration.allCases) { duration in
+                            Text(duration.title).tag(duration)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity)
+
+                    Button(L("开启", "Enable")) {
+                        viewModel.startSleepPrevention(duration: selectedDuration)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: viewModel.sleepPreventionState.isActive)
     }
 }
 
@@ -343,11 +388,7 @@ private struct ProcessAssertionsView: View {
                             isExpanded: expandedID == item.id,
                             onToggle: {
                                 withAnimation(.easeInOut(duration: 0.18)) {
-                                    if expandedID == item.id {
-                                        expandedID = nil
-                                    } else {
-                                        expandedID = item.id
-                                    }
+                                    expandedID = expandedID == item.id ? nil : item.id
                                 }
                             },
                             onIgnore: onIgnore
@@ -450,11 +491,7 @@ private struct KernelAssertionsView: View {
                             isExpanded: expandedID == item.id,
                             onToggle: {
                                 withAnimation(.easeInOut(duration: 0.18)) {
-                                    if expandedID == item.id {
-                                        expandedID = nil
-                                    } else {
-                                        expandedID = item.id
-                                    }
+                                    expandedID = expandedID == item.id ? nil : item.id
                                 }
                             },
                             onIgnore: onIgnore
@@ -634,6 +671,7 @@ private struct RecommendationsView: View {
 
 private struct HistoryView: View {
     let records: [HistoryRecord]
+    @State private var expandedID: Date?
 
     var body: some View {
         if records.isEmpty {
@@ -653,44 +691,90 @@ private struct HistoryView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             List(records) { record in
-                HStack(spacing: 0) {
-                    RoundedRectangle(cornerRadius: 1.5)
-                        .fill(record.status.color)
-                        .frame(width: 3)
-                        .padding(.trailing, 10)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(record.status.title)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(record.status.color)
-                            Spacer()
-                            Text(record.timestamp.formatted(date: .abbreviated, time: .standard))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                HistoryRecordRow(
+                    record: record,
+                    isExpanded: expandedID == record.id,
+                    onToggle: {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            expandedID = expandedID == record.id ? nil : record.id
                         }
-                        Text(L(
-                            "严重 \(record.criticalCount) · 注意 \(record.warningCount) · USB \(record.kernelAssertionCount)",
-                            "Critical \(record.criticalCount) · Warning \(record.warningCount) · USB \(record.kernelAssertionCount)"
-                        ))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        if let assertionSnapshots = record.assertionSnapshots, assertionSnapshots.isEmpty == false {
-                            Text(L(
-                                "记录 \(assertionSnapshots.count) 个阻止项快照",
-                                "\(assertionSnapshots.count) assertion snapshot(s) recorded"
-                            ))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        }
-                        Text(record.status.summary)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
-                }
+                )
                 .padding(.vertical, 3)
             }
             .listStyle(.inset)
+        }
+    }
+}
+
+private struct HistoryRecordRow: View {
+    let record: HistoryRecord
+    let isExpanded: Bool
+    let onToggle: () -> Void
+
+    private var hasSnapshots: Bool {
+        (record.assertionSnapshots ?? []).isEmpty == false
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 0) {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(record.status.color)
+                    .frame(width: 3)
+                    .padding(.trailing, 10)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(record.status.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(record.status.color)
+                        Spacer()
+                        Text(record.timestamp.formatted(date: .abbreviated, time: .standard))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if hasSnapshots {
+                            Button(action: onToggle) {
+                                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                    Text(L(
+                        "严重 \(record.criticalCount) · 注意 \(record.warningCount) · USB \(record.kernelAssertionCount)",
+                        "Critical \(record.criticalCount) · Warning \(record.warningCount) · USB \(record.kernelAssertionCount)"
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
+            if isExpanded, let snapshots = record.assertionSnapshots, snapshots.isEmpty == false {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(snapshots) { snapshot in
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: snapshot.kind == .process ? "app.badge" : "cable.connector")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 12)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(snapshot.name)
+                                    .font(.caption.weight(.medium))
+                                    .lineLimit(1)
+                                Text(snapshot.detail)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                }
+                .padding(.leading, 13)
+                .padding(.top, 8)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
     }
 }

@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import Foundation
 import SwiftUI
+import UserNotifications
 
 @MainActor
 final class SleepGuardViewModel: ObservableObject {
@@ -29,7 +30,7 @@ final class SleepGuardViewModel: ObservableObject {
     private let launchAtLoginManager: LaunchAtLoginManaging
     private let sleepPreventionManager: SleepPreventionManaging
     private var autoRefreshTask: Task<Void, Never>?
-    private var isMenuOpen = false
+    private var storedHistory: [HistoryRecord] = []
     private var cancellables = Set<AnyCancellable>()
 
     init(
@@ -54,7 +55,8 @@ final class SleepGuardViewModel: ObservableObject {
         self.historyStore = historyStore
         self.launchAtLoginManager = launchAtLoginManager
         self.sleepPreventionManager = sleepPreventionManager
-        self.history = Array(historyStore.load().reversed())
+        self.storedHistory = historyStore.load()
+        self.history = Array(storedHistory.reversed())
         self.sleepPreventionState = sleepPreventionManager.state
 
         self.sleepPreventionManager.onStateChange = { [weak self] state in
@@ -78,8 +80,7 @@ final class SleepGuardViewModel: ObservableObject {
             .dropFirst()
             .sink { [weak self] _ in
                 Task { @MainActor [weak self] in
-                    guard let self, self.isMenuOpen else { return }
-                    self.restartAutoRefresh()
+                    self?.restartAutoRefresh()
                 }
             }
             .store(in: &cancellables)
@@ -113,12 +114,15 @@ final class SleepGuardViewModel: ObservableObject {
         sleepPreventionState.detailText()
     }
 
+    func startBackgroundRefresh() async {
+        await refreshAll()
+        restartAutoRefresh()
+    }
+
     func start() async {
-        isMenuOpen = true
         if diagnosis == nil {
             await refreshAll()
         }
-        restartAutoRefresh()
     }
 
     func refreshAll() async {
@@ -131,29 +135,11 @@ final class SleepGuardViewModel: ObservableObject {
             let parsedAssertions = assertionsParser.parse(assertionsOutput)
             let now = Date()
             let newDiagnosis = makeDiagnosis(from: parsedAssertions, now: now)
+            let previousStatus = diagnosis?.overallStatus
             diagnosis = newDiagnosis
             lastRefresh = now
-            appendHistory(for: newDiagnosis, at: now)
-        } catch {
-            lastError = error.localizedDescription
-        }
-
-        isRefreshing = false
-    }
-
-    func refreshAssertionsOnly() async {
-        guard isRefreshing == false else { return }
-        isRefreshing = true
-        lastError = nil
-
-        do {
-            let output = try await runner.assertions()
-            let parsed = assertionsParser.parse(output)
-            let now = Date()
-            let newDiagnosis = makeDiagnosis(from: parsed, now: now)
-            diagnosis = newDiagnosis
-            lastRefresh = now
-            appendHistory(for: newDiagnosis, at: now)
+            appendHistoryIfNeeded(for: newDiagnosis, at: now)
+            sendCriticalNotificationIfNeeded(newStatus: newDiagnosis.overallStatus, previousStatus: previousStatus)
         } catch {
             lastError = error.localizedDescription
         }
@@ -225,11 +211,12 @@ final class SleepGuardViewModel: ObservableObject {
     }
 
     func restartAutoRefresh() {
-        stopAutoRefresh()
+        autoRefreshTask?.cancel()
+        autoRefreshTask = nil
         guard let seconds = settings.refreshInterval.seconds else { return }
         autoRefreshTask = Task { [weak self] in
             while Task.isCancelled == false {
-                try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+                try? await Task.sleep(for: .seconds(seconds))
                 guard Task.isCancelled == false else { return }
                 await self?.refreshAll()
             }
@@ -237,12 +224,16 @@ final class SleepGuardViewModel: ObservableObject {
     }
 
     func stopAutoRefresh() {
-        isMenuOpen = false
         autoRefreshTask?.cancel()
         autoRefreshTask = nil
     }
 
-    private func appendHistory(for diagnosis: SleepDiagnosis, at timestamp: Date) {
+    private func appendHistoryIfNeeded(for diagnosis: SleepDiagnosis, at timestamp: Date) {
+        let last = storedHistory.last
+        let statusChanged = last?.status != diagnosis.overallStatus
+        let hourElapsed = last.map { timestamp.timeIntervalSince($0.timestamp) >= 3600 } ?? true
+        guard statusChanged || hourElapsed else { return }
+
         let record = HistoryRecord(
             timestamp: timestamp,
             status: diagnosis.overallStatus,
@@ -252,15 +243,35 @@ final class SleepGuardViewModel: ObservableObject {
             summary: diagnosis.overallStatus.summary,
             assertionSnapshots: AssertionTrendAnalyzer.makeSnapshots(from: diagnosis)
         )
-        historyStore.append(record)
-        history = Array(historyStore.load().reversed())
+        storedHistory.append(record)
+        if storedHistory.count > 200 {
+            storedHistory.removeFirst(storedHistory.count - 200)
+        }
+        historyStore.save(storedHistory)
+        history = Array(storedHistory.reversed())
     }
 
     private func makeDiagnosis(from parsed: ParsedAssertions, now: Date) -> SleepDiagnosis {
-        let storedHistory = historyStore.load()
         let analyzedDiagnosis = riskAnalyzer.analyze(parsed)
         let trendedDiagnosis = trendAnalyzer.attachTrends(to: analyzedDiagnosis, history: storedHistory, now: now)
         return ignoredMatcher.apply(rules: settings.ignoredRules, to: trendedDiagnosis)
+    }
+
+    private func sendCriticalNotificationIfNeeded(newStatus: OverallSleepStatus, previousStatus: OverallSleepStatus?) {
+        guard newStatus == .critical, previousStatus != .critical else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "SleepGuard"
+        content.body = L(
+            "发现明确阻止休眠的项目，点击查看详情。",
+            "Sleep blockers detected. Tap to view details."
+        )
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: "sleepguard.critical",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
     }
 
     private func relocalizeCurrentState() {

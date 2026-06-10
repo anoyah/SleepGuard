@@ -295,27 +295,27 @@ private extension String {
 }
 
 enum RefreshInterval: String, CaseIterable, Identifiable {
-    case ten = "10"
-    case thirty = "30"
-    case sixty = "60"
+    case oneMinute = "60"
+    case fiveMinutes = "300"
+    case fifteenMinutes = "900"
     case manual = "manual"
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .ten: return L("10 秒", "10 s")
-        case .thirty: return L("30 秒", "30 s")
-        case .sixty: return L("60 秒", "60 s")
+        case .oneMinute: return L("1 分钟", "1 min")
+        case .fiveMinutes: return L("5 分钟", "5 min")
+        case .fifteenMinutes: return L("15 分钟", "15 min")
         case .manual: return L("手动", "Manual")
         }
     }
 
     var seconds: UInt64? {
         switch self {
-        case .ten: return 10
-        case .thirty: return 30
-        case .sixty: return 60
+        case .oneMinute: return 60
+        case .fiveMinutes: return 300
+        case .fifteenMinutes: return 900
         case .manual: return nil
         }
     }

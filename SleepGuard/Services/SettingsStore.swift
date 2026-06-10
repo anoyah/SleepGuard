@@ -29,8 +29,8 @@ final class SettingsStore: ObservableObject {
         self.defaults = defaults
         let languageValue = defaults.string(forKey: appLanguageKey) ?? AppLanguage.system.rawValue
         self.appLanguage = AppLanguage(rawValue: languageValue) ?? .system
-        let value = defaults.string(forKey: refreshIntervalKey) ?? RefreshInterval.thirty.rawValue
-        self.refreshInterval = RefreshInterval(rawValue: value) ?? .thirty
+        let value = defaults.string(forKey: refreshIntervalKey) ?? RefreshInterval.fiveMinutes.rawValue
+        self.refreshInterval = RefreshInterval(rawValue: value) ?? .fiveMinutes
         self.ignoredRules = Self.loadIgnoredRules(from: defaults, key: ignoredRulesKey)
     }
 

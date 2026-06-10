@@ -76,7 +76,7 @@ final class SleepPreventionManager: SleepPreventionManaging {
 
         if let seconds = duration.seconds {
             expirationTask = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                try? await Task.sleep(for: .seconds(seconds))
                 guard Task.isCancelled == false else { return }
                 await MainActor.run { [weak self] in
                     self?.stop()

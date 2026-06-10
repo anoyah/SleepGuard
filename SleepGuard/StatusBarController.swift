@@ -23,7 +23,13 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
     func popoverDidClose(_ notification: Notification) {
         removeMouseMonitors()
-        viewModel.stopAutoRefresh()
+    }
+
+    func showPopoverFromNotification() {
+        NSApp.activate(ignoringOtherApps: true)
+        if !popover.isShown {
+            showPopover()
+        }
     }
 
     private func configureStatusItem() {
